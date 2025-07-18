@@ -1,18 +1,16 @@
 import { Navigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
-import { JSX, useEffect, useState } from "react";
+import { JSX } from "react";
+import GlobalSpinner from "./GlobalSpinner";
 
 export const PrivateRoute = ({ children }: { children: JSX.Element }) => {
-  const { isAuthenticated } = useAuth();
-  const [checked, setChecked] = useState(false);
+  const { isAuthenticated, authLoading } = useAuth();
 
-  useEffect(() => {
-    setChecked(true);
-  }, []);
-
-  if (!checked) {
-    return null; 
+  if (authLoading) {
+    return <GlobalSpinner />; 
   }
 
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
+
+
