@@ -201,7 +201,7 @@ export default function GameInterface() {
               </div>
             </div>
             <div className="text-sm stat-text-muted">
-              Last seen: <span className="stat-text-accent">2 hours ago</span>
+              Last seen: <span className="stat-text-accent">9 hours ago</span>
             </div>
           </div>
 
