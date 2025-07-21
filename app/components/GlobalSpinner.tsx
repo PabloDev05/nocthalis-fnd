@@ -1,8 +1,8 @@
-export default function GlobalSpinner({ message = "Cargando..." }) {
+export default function GlobalSpinner() {
   return (
-    <div className="flex flex-col items-center justify-center h-screen w-screen bg-white">
-      <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mb-4" />
-      <p className="text-gray-600 text-lg">{message}</p>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-black">
+      <div className="animate-spin h-16 w-16 rounded-full border-t-4 border-b-4 border-purple-500" />
+      <p className="mt-4 text-white text-lg">Cargando...</p>
     </div>
   );
 }

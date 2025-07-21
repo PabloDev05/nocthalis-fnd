@@ -4,6 +4,7 @@ import axios from "axios";
 import { useNavigate, Link } from "react-router";
 import { useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
+import PublicRoute from "./PublicRoute";
 
 const API_BASE_URL = "http://localhost:3030/api";
 
@@ -36,10 +37,18 @@ const Login = () => {
         });
 
         if (res.data.token) {
-          login(res.data.token, values.username, res.data.classChosen ?? false);
-          navigate("/game");
-        } else {
-          setServerError("Token no recibido del servidor");
+          login(
+            res.data.token,
+            values.username,
+            res.data.classChosen ?? false,
+            res.data.characterClass ?? ""
+          );
+
+          if (res.data.classChosen) {
+            navigate("/game");
+          } else {
+            navigate("/choose-class");
+          }
         }
       } catch (err: any) {
         if (axios.isAxiosError(err)) {
@@ -57,86 +66,93 @@ const Login = () => {
   );
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-      <div className="bg-white p-8 rounded shadow-md w-full max-w-sm">
-        <h2 className="text-2xl font-bold mb-6 text-center">Iniciar sesión</h2>
+    <PublicRoute>
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white p-8 rounded shadow-md w-full max-w-sm">
+          <h2 className="text-2xl font-bold mb-6 text-center">
+            Iniciar sesión
+          </h2>
 
-        <Formik
-          initialValues={initialValues}
-          validationSchema={validationSchema}
-          onSubmit={handleSubmit}
-        >
-          {({ isSubmitting }) => (
-            <Form className="space-y-4">
-              {serverError && (
-                <div className="bg-red-100 text-red-600 p-2 rounded text-sm">
-                  {serverError}
+          <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            onSubmit={handleSubmit}
+          >
+            {({ isSubmitting }) => (
+              <Form className="space-y-4">
+                {serverError && (
+                  <div className="bg-red-100 text-red-600 p-2 rounded text-sm">
+                    {serverError}
+                  </div>
+                )}
+
+                <div>
+                  <label
+                    className="block text-sm font-medium mb-1"
+                    htmlFor="username"
+                  >
+                    Usuario
+                  </label>
+                  <Field
+                    id="username"
+                    name="username"
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <ErrorMessage
+                    name="username"
+                    component="div"
+                    className="text-red-500 text-sm"
+                  />
                 </div>
-              )}
 
-              <div>
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="username"
+                <div>
+                  <label
+                    className="block text-sm font-medium mb-1"
+                    htmlFor="password"
+                  >
+                    Contraseña
+                  </label>
+                  <Field
+                    id="password"
+                    name="password"
+                    type="password"
+                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <ErrorMessage
+                    name="password"
+                    component="div"
+                    className="text-red-500 text-sm"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`w-full bg-blue-600 text-white py-2 px-4 rounded ${
+                    isSubmitting
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:bg-blue-700"
+                  }`}
                 >
-                  Usuario
-                </label>
-                <Field
-                  id="username"
-                  name="username"
-                  type="text"
-                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <ErrorMessage
-                  name="username"
-                  component="div"
-                  className="text-red-500 text-sm"
-                />
-              </div>
+                  {isSubmitting ? "Ingresando..." : "Ingresar"}
+                </button>
 
-              <div>
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="password"
-                >
-                  Contraseña
-                </label>
-                <Field
-                  id="password"
-                  name="password"
-                  type="password"
-                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <ErrorMessage
-                  name="password"
-                  component="div"
-                  className="text-red-500 text-sm"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className={`w-full bg-blue-600 text-white py-2 px-4 rounded ${
-                  isSubmitting
-                    ? "opacity-50 cursor-not-allowed"
-                    : "hover:bg-blue-700"
-                }`}
-              >
-                {isSubmitting ? "Ingresando..." : "Ingresar"}
-              </button>
-
-              <p className="text-sm mt-4 text-center">
-                ¿No tienes cuenta?{" "}
-                <Link to="/register" className="text-blue-600 hover:underline">
-                  Regístrate aquí
-                </Link>
-              </p>
-            </Form>
-          )}
-        </Formik>
+                <p className="text-sm mt-4 text-center">
+                  ¿No tienes cuenta?{" "}
+                  <Link
+                    to="/register"
+                    className="text-blue-600 hover:underline"
+                  >
+                    Regístrate aquí
+                  </Link>
+                </p>
+              </Form>
+            )}
+          </Formik>
+        </div>
       </div>
-    </div>
+    </PublicRoute>
   );
 };
 

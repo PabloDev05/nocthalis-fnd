@@ -1,21 +1,31 @@
-import { Formik, Form, Field, ErrorMessage } from "formik";
+import { Formik, Form, Field, ErrorMessage, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import axios from "axios";
 import { useNavigate } from "react-router";
-import { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext"; // importa tu contexto
+import { useEffect, useState, useMemo } from "react";
+import { useAuth } from "../context/AuthContext";
+import PublicRoute from "./PublicRoute";
 
-const RegisterForm = () => {
+const API_BASE_URL = "http://localhost:3030/api";
+
+const Register = () => {
   const [serverError, setServerError] = useState("");
   const [success, setSuccess] = useState("");
   const navigate = useNavigate();
-  const { login, classChosen } = useAuth(); // contexto auth
+
+  const { login, isAuthenticated, classChosen } = useAuth();
+
+  // Leer selectedClass solo una vez
+  const selectedClass = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("selectedClass");
+  }, []);
 
   useEffect(() => {
-    if (classChosen) {
-      navigate("/game"); // si ya está logueado, va directo
+    if (isAuthenticated && classChosen) {
+      navigate("/game");
     }
-  }, [classChosen, navigate]);
+  }, [isAuthenticated, classChosen, navigate]);
 
   const validationSchema = Yup.object({
     username: Yup.string().required("El nombre de usuario es obligatorio"),
@@ -37,11 +47,9 @@ const RegisterForm = () => {
     confirmPassword: "",
   };
 
-  const selectedClass = localStorage.getItem("selectedClass") || null;
-
   const handleSubmit = async (
     values: typeof initialValues,
-    { setSubmitting }: any
+    { setSubmitting }: FormikHelpers<typeof initialValues>
   ) => {
     setServerError("");
     setSuccess("");
@@ -53,16 +61,15 @@ const RegisterForm = () => {
     }
 
     try {
-      const res = await axios.post("http://localhost:3030/api/auth/register", {
+      const res = await axios.post(`${API_BASE_URL}/auth/register`, {
         username: values.username,
         email: values.email,
         password: values.password,
         characterClass: selectedClass,
       });
 
-      // Usamos login del contexto para actualizar estado global + localStorage
       if (res.data.userId && res.data.token) {
-        login(res.data.token, values.username, true); // actualiza contexto y localStorage
+        login(res.data.token, values.username, true, selectedClass);
         setSuccess(res.data.message);
         setTimeout(() => navigate("/game"), 1000);
       }
@@ -74,92 +81,94 @@ const RegisterForm = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded shadow">
-      <h2 className="text-2xl font-bold mb-4">Registro</h2>
+    <PublicRoute>
+      <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded shadow">
+        <h2 className="text-2xl font-bold mb-4">Registro</h2>
 
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-      >
-        {({ isSubmitting }) => (
-          <Form className="space-y-4">
-            <div>
-              <Field
-                name="username"
-                placeholder="Nombre de usuario"
-                className="w-full p-2 border rounded"
-              />
-              <ErrorMessage
-                name="username"
-                component="div"
-                className="text-red-500 text-sm"
-              />
-            </div>
+        <Formik
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleSubmit}
+        >
+          {({ isSubmitting }) => (
+            <Form className="space-y-4">
+              <div>
+                <Field
+                  name="username"
+                  placeholder="Nombre de usuario"
+                  className="w-full p-2 border rounded"
+                />
+                <ErrorMessage
+                  name="username"
+                  component="div"
+                  className="text-red-500 text-sm"
+                />
+              </div>
 
-            <div>
-              <Field
-                name="email"
-                type="email"
-                placeholder="Correo electrónico"
-                className="w-full p-2 border rounded"
-              />
-              <ErrorMessage
-                name="email"
-                component="div"
-                className="text-red-500 text-sm"
-              />
-            </div>
+              <div>
+                <Field
+                  name="email"
+                  type="email"
+                  placeholder="Correo electrónico"
+                  className="w-full p-2 border rounded"
+                />
+                <ErrorMessage
+                  name="email"
+                  component="div"
+                  className="text-red-500 text-sm"
+                />
+              </div>
 
-            <div>
-              <Field
-                name="password"
-                type="password"
-                placeholder="Contraseña"
-                className="w-full p-2 border rounded"
-              />
-              <ErrorMessage
-                name="password"
-                component="div"
-                className="text-red-500 text-sm"
-              />
-            </div>
+              <div>
+                <Field
+                  name="password"
+                  type="password"
+                  placeholder="Contraseña"
+                  className="w-full p-2 border rounded"
+                />
+                <ErrorMessage
+                  name="password"
+                  component="div"
+                  className="text-red-500 text-sm"
+                />
+              </div>
 
-            <div>
-              <Field
-                name="confirmPassword"
-                type="password"
-                placeholder="Confirmar contraseña"
-                className="w-full p-2 border rounded"
-              />
-              <ErrorMessage
-                name="confirmPassword"
-                component="div"
-                className="text-red-500 text-sm"
-              />
-            </div>
+              <div>
+                <Field
+                  name="confirmPassword"
+                  type="password"
+                  placeholder="Confirmar contraseña"
+                  className="w-full p-2 border rounded"
+                />
+                <ErrorMessage
+                  name="confirmPassword"
+                  component="div"
+                  className="text-red-500 text-sm"
+                />
+              </div>
 
-            {serverError && (
-              <p className="text-red-500 text-sm">{serverError}</p>
-            )}
-            {success && <p className="text-green-500 text-sm">{success}</p>}
+              {serverError && (
+                <p className="text-red-500 text-sm">{serverError}</p>
+              )}
+              {success && <p className="text-green-500 text-sm">{success}</p>}
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className={`w-full bg-blue-600 text-white py-2 rounded ${
-                isSubmitting
-                  ? "opacity-50 cursor-not-allowed"
-                  : "hover:bg-blue-700"
-              }`}
-            >
-              {isSubmitting ? "Registrando..." : "Registrarse"}
-            </button>
-          </Form>
-        )}
-      </Formik>
-    </div>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className={`w-full bg-blue-600 text-white py-2 rounded ${
+                  isSubmitting
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-blue-700"
+                }`}
+              >
+                {isSubmitting ? "Registrando..." : "Registrarse"}
+              </button>
+            </Form>
+          )}
+        </Formik>
+      </div>
+    </PublicRoute>
   );
 };
 
-export default RegisterForm;
+export default Register;

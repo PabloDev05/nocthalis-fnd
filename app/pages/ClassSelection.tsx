@@ -38,14 +38,29 @@ const ClassSelection = () => {
 
     if (classChosen === "true" && selectedClass) {
       navigate("/game");
+    } else {
+      setLoading(false);
     }
   }, [navigate]);
 
   const handleClassSelect = (classId: string) => {
     setLoading(true);
     localStorage.setItem("selectedClass", classId);
+    localStorage.setItem("classChosen", "true");
     navigate("/register");
   };
+
+  if (loading) {
+    // Spinner elegante mientras redirige o carga
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500"></div>
+          <p className="mt-4 text-white text-lg">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
