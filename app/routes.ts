@@ -1,12 +1,13 @@
 import { type RouteConfig, route } from "@react-router/dev/routes";
 
 export default [
-  route("/", "./pages/ProtectedHome.tsx"),
-  route("/login", "./pages/Login.tsx"),
-  route("/register", "./pages/Register.tsx"),
-  route("/dashboard", "./pages/ProtectedDashboard.tsx"),
-  route("/game", "./pages/GameInterface.tsx"),
-  route("/gameOld", "./pages/GameInterfaceOld.tsx"),
+  route("/", "./pages/ClassSelection.tsx"), // pública
+  route("/login", "./pages/Login.tsx"), // pública
+  route("/register", "./pages/Register.tsx"), // pública
+
+  // protegidas
+  route("/dashboard", "./pages/protected/ProtectedDashboard.tsx"),
+  route("/game", "./pages/protected/ProtectedGameInterface.tsx"),
 
   route("*", "./pages/NotFound.tsx"),
 ] satisfies RouteConfig;

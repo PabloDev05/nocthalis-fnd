@@ -2,12 +2,20 @@ import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
 import axios from "axios";
 import { useNavigate } from "react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext"; // importa tu contexto
 
 const RegisterForm = () => {
   const [serverError, setServerError] = useState("");
   const [success, setSuccess] = useState("");
   const navigate = useNavigate();
+  const { login, classChosen } = useAuth(); // contexto auth
+
+  useEffect(() => {
+    if (classChosen) {
+      navigate("/game"); // si ya está logueado, va directo
+    }
+  }, [classChosen, navigate]);
 
   const validationSchema = Yup.object({
     username: Yup.string().required("El nombre de usuario es obligatorio"),
@@ -29,19 +37,35 @@ const RegisterForm = () => {
     confirmPassword: "",
   };
 
-  const handleSubmit = async (values: typeof initialValues, { setSubmitting }: any) => {
+  const selectedClass = localStorage.getItem("selectedClass") || null;
+
+  const handleSubmit = async (
+    values: typeof initialValues,
+    { setSubmitting }: any
+  ) => {
     setServerError("");
     setSuccess("");
+
+    if (!selectedClass) {
+      setServerError("Debes seleccionar una clase antes de registrarte.");
+      setSubmitting(false);
+      return;
+    }
 
     try {
       const res = await axios.post("http://localhost:3030/api/auth/register", {
         username: values.username,
         email: values.email,
         password: values.password,
+        characterClass: selectedClass,
       });
 
-      setSuccess(res.data.message);
-      setTimeout(() => navigate("/login"), 1500);
+      // Usamos login del contexto para actualizar estado global + localStorage
+      if (res.data.userId && res.data.token) {
+        login(res.data.token, values.username, true); // actualiza contexto y localStorage
+        setSuccess(res.data.message);
+        setTimeout(() => navigate("/game"), 1000);
+      }
     } catch (err: any) {
       setServerError(err.response?.data?.message || "Error al registrar");
     } finally {
@@ -115,14 +139,18 @@ const RegisterForm = () => {
               />
             </div>
 
-            {serverError && <p className="text-red-500 text-sm">{serverError}</p>}
+            {serverError && (
+              <p className="text-red-500 text-sm">{serverError}</p>
+            )}
             {success && <p className="text-green-500 text-sm">{success}</p>}
 
             <button
               type="submit"
               disabled={isSubmitting}
               className={`w-full bg-blue-600 text-white py-2 rounded ${
-                isSubmitting ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-700"
+                isSubmitting
+                  ? "opacity-50 cursor-not-allowed"
+                  : "hover:bg-blue-700"
               }`}
             >
               {isSubmitting ? "Registrando..." : "Registrarse"}

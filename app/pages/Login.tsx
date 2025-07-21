@@ -1,10 +1,11 @@
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
 import axios from "axios";
-import { useNavigate } from "react-router";
-import { Link } from "react-router";
-import { useState } from "react";
+import { useNavigate, Link } from "react-router";
+import { useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
+
+const API_BASE_URL = "http://localhost:3030/api";
 
 const Login = () => {
   const { login } = useAuth();
@@ -21,31 +22,39 @@ const Login = () => {
     password: "",
   };
 
-  const handleSubmit = async (
-    values: typeof initialValues,
-    { setSubmitting }: { setSubmitting: (isSubmitting: boolean) => void }
-  ) => {
-    setServerError("");
+  const handleSubmit = useCallback(
+    async (
+      values: typeof initialValues,
+      { setSubmitting }: { setSubmitting: (isSubmitting: boolean) => void }
+    ) => {
+      setServerError("");
 
-    try {
-      const res = await axios.post("http://localhost:3030/api/auth/login", {
-        username: values.username,
-        password: values.password,
-      });
+      try {
+        const res = await axios.post(`${API_BASE_URL}/auth/login`, {
+          username: values.username,
+          password: values.password,
+        });
 
-      if (res.data.token) {
-        login(res.data.token, values.username);
-        navigate("/dashboard");
-      } else {
-        setServerError("Token no recibido del servidor");
+        if (res.data.token) {
+          login(res.data.token, values.username, res.data.classChosen ?? false);
+          navigate("/game");
+        } else {
+          setServerError("Token no recibido del servidor");
+        }
+      } catch (err: any) {
+        if (axios.isAxiosError(err)) {
+          setServerError(
+            err.response?.data?.message || "Error al iniciar sesión"
+          );
+        } else {
+          setServerError("Error inesperado al iniciar sesión");
+        }
+      } finally {
+        setSubmitting(false);
       }
-      
-    } catch (err: any) {
-      setServerError(err.response?.data?.message || "Error al iniciar sesión");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    },
+    [login, navigate]
+  );
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
@@ -66,7 +75,10 @@ const Login = () => {
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-1" htmlFor="username">
+                <label
+                  className="block text-sm font-medium mb-1"
+                  htmlFor="username"
+                >
                   Usuario
                 </label>
                 <Field
@@ -75,11 +87,18 @@ const Login = () => {
                   type="text"
                   className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <ErrorMessage name="username" component="div" className="text-red-500 text-sm" />
+                <ErrorMessage
+                  name="username"
+                  component="div"
+                  className="text-red-500 text-sm"
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1" htmlFor="password">
+                <label
+                  className="block text-sm font-medium mb-1"
+                  htmlFor="password"
+                >
                   Contraseña
                 </label>
                 <Field
@@ -88,14 +107,20 @@ const Login = () => {
                   type="password"
                   className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <ErrorMessage name="password" component="div" className="text-red-500 text-sm" />
+                <ErrorMessage
+                  name="password"
+                  component="div"
+                  className="text-red-500 text-sm"
+                />
               </div>
 
               <button
                 type="submit"
                 disabled={isSubmitting}
                 className={`w-full bg-blue-600 text-white py-2 px-4 rounded ${
-                  isSubmitting ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-700"
+                  isSubmitting
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-blue-700"
                 }`}
               >
                 {isSubmitting ? "Ingresando..." : "Ingresar"}
@@ -113,6 +138,6 @@ const Login = () => {
       </div>
     </div>
   );
-}
+};
 
 export default Login;

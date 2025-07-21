@@ -157,20 +157,21 @@ export default function GameInterfaceCopy() {
 
   const EquipmentSlot = ({ type, icon: Icon, item }: any) => (
     <div
-      className="equipment-slot flex items-center justify-center"
+      className="equipment-slot flex items-center justify-center w-23 h-23 bg-gray-700 rounded-lg"
       title={item ? item.name : type}
     >
       {item && item.imageUrl ? (
         <img
           src={item.imageUrl}
           alt={item.name}
-          className="w-10 h-10 object-contain"
+          className="w-20 h-20 object-contain"
         />
       ) : (
-        <Icon className="w-6 h-6 text-gray-500" />
+        <Icon className="w-10 h-10 text-gray-500" />
       )}
     </div>
   );
+
   return (
     <div className="min-h-screen text-sm leading-tight space-y-2 bg-gradient-to-br from-gray-900 via-black to-gray-800 relative">
       {/* Fondo oscuro */}
@@ -208,7 +209,7 @@ export default function GameInterfaceCopy() {
 
       <div className="relative z-10 flex h-[calc(100vh-40px)]">
         {/* Menú lateral izquierdo */}
-        <aside className="w-72 p-5">
+        <aside className="w-59 h-215 p-2 space-y-1 bg-gray-800/60 ml-1 rounded-lg shadow-lg">
           {menuItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -227,39 +228,10 @@ export default function GameInterfaceCopy() {
         </aside>
 
         {/* Contenido principal */}
-        <main className="flex-1 p-4 space-y-4">
-          <div className="flex items-center justify-between text-xs gap-2">
-            <div className="flex items-center gap-2">
-              {/* Oro */}
-              <div className="dark-panel px-2 py-1 flex items-center gap-2">
-                <div className="w-6 h-6 bg-yellow-600 rounded-full flex items-center justify-center">
-                  <Crown className="w-4 h-4 text-yellow-900" />
-                </div>
-                <span className="stat-text font-semibold">
-                  {character.resources.gold.toLocaleString("en-US")}
-                </span>
-              </div>
-
-              {/* Sangre */}
-              <div className="dark-panel px-2 py-1 flex items-center gap-2">
-                <div className="w-6 h-6 bg-red-700 rounded-full flex items-center justify-center">
-                  <Droplet className="w-4 h-4 text-red-200" />
-                </div>
-                <span className="stat-text font-semibold">
-                  {character.resources.blood}
-                </span>
-              </div>
-            </div>
-
-            {/* Última conexión */}
-            <div className="text-[11px] stat-text-muted whitespace-nowrap">
-              Last seen: <span className="stat-text-accent">2h ago</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 h-[calc(100%-40px)]">
+        <main className="flex-1 space-y-4">
+          <div className="grid grid-cols-3 gap-1 h-[calc(100%-40px)]">
             {/* Panel combinado: personaje + stats */}
-            <div className="col-span-2 dark-panel p-3 flex flex-col">
+            <div className="col-span-2 dark-panel p-3 flex flex-col ml-1">
               {/* Info principal */}
               <div className="flex items-center space-x-3 mb-6">
                 <div className="w-10 h-10 bg-gradient-to-br from-red-700 to-red-900 rounded-full flex items-center justify-center">
@@ -268,9 +240,6 @@ export default function GameInterfaceCopy() {
                 <span className="stat-text font-semibold text-lg">
                   {character.class}
                 </span>
-                <div className="ml-auto px-4 py-2 bg-gradient-to-r from-blue-700 to-blue-800 border border-blue-600 text-sm font-bold stat-text rounded">
-                  Level {character.level}
-                </div>
               </div>
 
               {/* 🔍 Información extra + 💥 Habilidades */}
@@ -383,99 +352,115 @@ export default function GameInterfaceCopy() {
             </div>
 
             {/* Panel derecho: equipamiento y stats */}
-            <div className="dark-panel p-3">
-              {/* Área del personaje con equipamiento */}
-              <div className="relative w-full flex justify-center py-6">
-                <div className="relative w-[160px] h-[160px]">
-                  {/* Avatar */}
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-zinc-800 to-zinc-900 rounded-lg shadow-inner">
-                    <User className="w-20 h-20 text-gray-300" />
-                  </div>
+            <div className="dark-panel p-6 max-w-4x2 mx-auto">
+              {/* Character Equipment Grid */}
+              <div className="flex justify-center mb-8">
+                <div className="relative">
+                  {/* Equipment Grid Layout */}
+                  <div className="grid grid-cols-3 gap-4 items-center">
+                    {/* Left Column - Equipment */}
+                    <div className="flex flex-col gap-3 items-center justify-center">
+                      <EquipmentSlot
+                        type="Head"
+                        icon={CircleDot}
+                        item={character.equipment.head}
+                      />
+                      <EquipmentSlot
+                        type="Chest"
+                        icon={Shirt}
+                        item={character.equipment.chest}
+                      />
+                      <EquipmentSlot
+                        type="Gloves"
+                        icon={Hand}
+                        item={character.equipment.gloves}
+                      />
+                      <EquipmentSlot
+                        type="Boots"
+                        icon={Boots}
+                        item={character.equipment.boots}
+                      />
+                    </div>
 
-                  {/* Nombre debajo */}
-                  <div className="absolute -bottom-6 w-full text-center text-xs text-blue-300 font-medium">
-                    {character.name}
-                  </div>
+                    {/* Center Column - Avatar */}
+                    <div className="flex flex-col items-center justify-center">
+                      {/* Character name pegado arriba del avatar */}
+                      <div className="w-48 text-center text-lg text-blue-300 font-bold  px-3 py-1 bg-black/40 rounded-t-lg border-t border-l border-r border-gray-600">
+                        {character.name}
+                      </div>
 
-                  {/* Equipment: izquierda */}
-                  <div className="absolute -left-16 top-0 flex flex-col gap-1 items-center">
-                    <EquipmentSlot
-                      type="Head"
-                      icon={CircleDot}
-                      item={character.equipment.head}
-                    />
-                    <EquipmentSlot
-                      type="Chest"
-                      icon={Shirt}
-                      item={character.equipment.chest}
-                    />
-                    <EquipmentSlot
-                      type="Gloves"
-                      icon={Hand}
-                      item={character.equipment.gloves}
-                    />
-                    <EquipmentSlot
-                      type="Boots"
-                      icon={Boots}
-                      item={character.equipment.boots}
-                    />
-                  </div>
+                      <div className="w-48 h-56 bg-gradient-to-b from-zinc-800 to-zinc-900  shadow-inner flex items-center justify-center border-l border-r border-gray-600">
+                        <User className="w-24 h-24 text-gray-300" />
+                      </div>
 
-                  {/* Equipment: derecha */}
-                  <div className="absolute -right-16 top-0 flex flex-col gap-1 items-center">
-                    <EquipmentSlot
-                      type="Amulet"
-                      icon={Necklace}
-                      item={character.equipment.amulet}
-                    />
-                    <EquipmentSlot
-                      type="Belt"
-                      icon={Belt}
-                      item={character.equipment.belt}
-                    />
-                    <EquipmentSlot
-                      type="Ring"
-                      icon={Ring}
-                      item={character.equipment.ring}
-                    />
-                  </div>
+                      {/* Level como barra de progreso pegada al avatar */}
+                      <div className="w-48 h-8 bg-gray-800 rounded-b-lg border-b border-l border-r border-gray-600 relative overflow-hidden">
+                        {/* Barra de progreso */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-500 w-[75%] "></div>
+                        {/* Label del level centrado */}
+                        <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm z-10 ">
+                          Level {character.level}
+                        </div>
+                      </div>
+                      {/* Weapons below avatar */}
+                      <div className="flex gap-4 mt-5.5 justify-center">
+                        <EquipmentSlot
+                          type="Main Weapon"
+                          icon={Sword}
+                          item={character.equipment.mainWeapon}
+                        />
+                        <EquipmentSlot
+                          type="Off-hand"
+                          icon={Shield}
+                          item={character.equipment.offHandWeapon}
+                        />
+                      </div>
+                    </div>
 
-                  {/* Equipment: armas debajo */}
-                  <div className="absolute  left-1/2 -translate-x-1/2 flex gap-4 mt-10">
-                    <EquipmentSlot
-                      type="Main Weapon"
-                      icon={Sword}
-                      item={character.equipment.mainWeapon}
-                    />
-                    <EquipmentSlot
-                      type="Off-hand"
-                      icon={Shield}
-                      item={character.equipment.offHandWeapon}
-                    />
+                    {/* Right Column - Accessories */}
+                    <div className="flex flex-col gap-3 items-center justify-center">
+                      <EquipmentSlot
+                        type="Amulet"
+                        icon={Necklace}
+                        item={character.equipment.amulet}
+                      />
+                      <EquipmentSlot
+                        type="Belt"
+                        icon={Belt}
+                        item={character.equipment.belt}
+                      />
+                      <EquipmentSlot
+                        type="Ring"
+                        icon={Ring}
+                        item={character.equipment.ring}
+                      />
+                      {/* Empty slot for symmetry */}
+                      <div className="w-20 h-20"></div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Stats */}
-              <div className="flex flex-row gap-3 mt-23">
+              {/* Stats Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 {/* Character Stats */}
-                <div className="flex-1 bg-gray-800/60 p-4 rounded-xl">
-                  <h3 className="stat-text font-semibold mb-4 flex items-center text-lg">
-                    <Zap className="w-6 h-6 mr-3 text-purple-400" />
+                <div className="bg-gray-800/60 p-4 rounded-xl">
+                  <h3 className="text-white font-semibold mb-4 flex items-center text-base">
+                    <Zap className="w-5 h-5 mr-3 text-purple-400" />
                     Character Stats
                   </h3>
-                  <div className="space-y-2 mb-4">
+                  <div className="space-y-3">
                     {Object.entries(character.stats).map(([stat, value]) => (
                       <div
                         key={stat}
                         className="flex justify-between items-center"
                       >
-                        <span className="stat-text-muted capitalize">
+                        <span className="text-gray-300 capitalize text-sm">
                           {stat}
                         </span>
                         <div className="flex items-center space-x-3">
-                          <span className="stat-text font-bold">{value}</span>
-                          <Plus className="w-4 h-4 text-green-500 cursor-pointer hover:text-green-400" />
+                          <span className="text-white font-bold">{value}</span>
+                          <Plus className="w-4 h-4 text-green-500 cursor-pointer hover:text-green-400 transition-colors" />
                         </div>
                       </div>
                     ))}
@@ -483,17 +468,20 @@ export default function GameInterfaceCopy() {
                 </div>
 
                 {/* Combat Stats */}
-                <div className="flex-1 bg-gray-800/60 p-4 rounded-xl">
-                  <h3 className="stat-text font-semibold mb-4 text-lg">
+                <div className="bg-gray-800/60 p-4 rounded-xl">
+                  <h3 className="text-white font-semibold mb-4 text-base">
                     Combat Stats
                   </h3>
-                  <div className="space-y-2 text-sm">
+                  <div className="space-y-3">
                     {Object.entries(character.combat).map(([label, value]) => (
-                      <div key={label} className="flex justify-between">
-                        <span className="stat-text-muted capitalize">
+                      <div
+                        key={label}
+                        className="flex justify-between items-center"
+                      >
+                        <span className="text-gray-300 capitalize text-sm">
                           {label}
                         </span>
-                        <span className="stat-text-purple font-bold">
+                        <span className="text-purple-400 font-bold text-sm">
                           {value}
                         </span>
                       </div>
@@ -502,23 +490,23 @@ export default function GameInterfaceCopy() {
                 </div>
               </div>
 
-              {/* Inventario */}
-              <div className="mt-10 max-w-4xl mx-auto border-t border-gray-600 pt-4">
+              {/* Inventory Section */}
+              <div className="border-t border-gray-600 pt-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="stat-text font-semibold flex items-center">
+                  <h3 className="text-white font-semibold flex items-center">
                     <Package className="w-5 h-5 mr-2 text-gray-400" />
                     Inventory
                   </h3>
-                  <div className="text-xs stat-text-muted">
-                    <span className="stat-text-accent">6</span>/10
+                  <div className="text-xs text-gray-400">
+                    <span className="text-purple-400">6</span>/10
                   </div>
                 </div>
 
-                <div className="grid grid-cols-5 gap-1 max-h-48 overflow-y-auto">
+                <div className="grid grid-cols-5 gap-2 mb-4">
                   {Array.from({ length: 10 }, (_, i) => (
                     <div
                       key={i}
-                      className="equipment-slot aspect-square flex items-center justify-center"
+                      className="aspect-square bg-gray-800/80 border border-gray-600 rounded-lg flex items-center justify-center hover:border-purple-400 transition-colors cursor-pointer"
                     >
                       {i === 0 && <Sword className="w-6 h-6 text-gray-400" />}
                       {i === 1 && <Shield className="w-6 h-6 text-gray-400" />}
@@ -534,11 +522,11 @@ export default function GameInterfaceCopy() {
                   ))}
                 </div>
 
-                <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-600">
-                  <div className="text-xs stat-text-muted">
-                    Weight: <span className="stat-text-accent">45.2</span>/100
+                <div className="flex justify-between items-center pt-3 border-t border-gray-600">
+                  <div className="text-xs text-gray-400">
+                    Weight: <span className="text-purple-400">45.2</span>/100
                   </div>
-                  <button className="text-xs stat-text-accent hover:text-purple-300 transition-colors">
+                  <button className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
                     Auto Sort
                   </button>
                 </div>

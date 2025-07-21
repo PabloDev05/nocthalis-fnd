@@ -11,6 +11,7 @@
   }
 }
 
+
 @layer components {
   .dark-panel {
     background-color: rgba(17, 24, 39, 0.9); /* bg-gray-900/90 */
