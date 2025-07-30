@@ -15,5 +15,8 @@ export default [
   route("/dashboard", "./pages/protected/ProtectedDashboard.tsx"),
   route("/game", "./pages/protected/ProtectedGameInterface.tsx"),
 
+  // Test de diagrama de clases e info.
+  route("/class-diagram", "./pages/ClassDiagram.tsx"),
+
   route("*", "./pages/NotFound.tsx"),
 ] satisfies RouteConfig;
