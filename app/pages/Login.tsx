@@ -1,3 +1,4 @@
+// Login.tsx
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
 import axios from "axios";
@@ -67,9 +68,9 @@ const Login = () => {
 
   return (
     <PublicRoute>
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <div className="bg-white p-8 rounded shadow-md w-full max-w-sm">
-          <h2 className="text-2xl font-bold mb-6 text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-gray-900 to-black p-6">
+        <div className="bg-gray-900/70 border border-gray-700 shadow-lg rounded-2xl p-8 w-full max-w-md text-white backdrop-blur-md">
+          <h2 className="text-3xl font-bold text-center mb-6 tracking-wide text-gray-100">
             Iniciar sesión
           </h2>
 
@@ -79,16 +80,16 @@ const Login = () => {
             onSubmit={handleSubmit}
           >
             {({ isSubmitting }) => (
-              <Form className="space-y-4">
+              <Form className="space-y-5">
                 {serverError && (
-                  <div className="bg-red-100 text-red-600 p-2 rounded text-sm">
+                  <div className="bg-red-900/40 text-red-400 border border-red-600 p-3 rounded text-sm">
                     {serverError}
                   </div>
                 )}
 
                 <div>
                   <label
-                    className="block text-sm font-medium mb-1"
+                    className="block text-sm mb-1 text-gray-300"
                     htmlFor="username"
                   >
                     Usuario
@@ -97,18 +98,19 @@ const Login = () => {
                     id="username"
                     name="username"
                     type="text"
-                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Tu usuario..."
                   />
                   <ErrorMessage
                     name="username"
                     component="div"
-                    className="text-red-500 text-sm"
+                    className="text-red-400 text-sm mt-1"
                   />
                 </div>
 
                 <div>
                   <label
-                    className="block text-sm font-medium mb-1"
+                    className="block text-sm mb-1 text-gray-300"
                     htmlFor="password"
                   >
                     Contraseña
@@ -117,32 +119,31 @@ const Login = () => {
                     id="password"
                     name="password"
                     type="password"
-                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="••••••••"
                   />
                   <ErrorMessage
                     name="password"
                     component="div"
-                    className="text-red-500 text-sm"
+                    className="text-red-400 text-sm mt-1"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`w-full bg-blue-600 text-white py-2 px-4 rounded ${
-                    isSubmitting
-                      ? "opacity-50 cursor-not-allowed"
-                      : "hover:bg-blue-700"
+                  className={`w-full py-2 rounded bg-[#2f1e4d] hover:bg-[#40235f] transition duration-300 shadow-md text-white ${
+                    isSubmitting ? "opacity-50 cursor-not-allowed" : ""
                   }`}
                 >
                   {isSubmitting ? "Ingresando..." : "Ingresar"}
                 </button>
 
-                <p className="text-sm mt-4 text-center">
+                <p className="text-sm mt-4 text-center text-gray-400">
                   ¿No tienes cuenta?{" "}
                   <Link
-                    to="/register"
-                    className="text-blue-600 hover:underline"
+                    to="/select-class"
+                    className="text-purple-400 hover:underline hover:text-purple-300"
                   >
                     Regístrate aquí
                   </Link>
