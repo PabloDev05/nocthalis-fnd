@@ -8,10 +8,10 @@ const StartupRedirect = () => {
   const { isAuthenticated, classChosen, authLoading } = useAuth();
 
   useEffect(() => {
-    if (authLoading) return; // No redirigir hasta que se cargue el estado
+    if (authLoading) return;
 
     if (!isAuthenticated) {
-      navigate(classChosen ? "/register" : "/select-class");
+      navigate("/login");
     } else {
       navigate(classChosen ? "/game" : "/select-class");
     }
