@@ -1,94 +1,96 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
-import { Card } from "../components/ui/CardCharSelect";
-import { Button } from "../components/ui/ButtonCharSelect";
-import { cn } from "../lib/utils";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
-const classes = [
-  {
-    id: "exo-titan",
-    name: "Exo-Titan",
-    description: "Un coloso blindado que domina el combate cuerpo a cuerpo.",
-    icon: "shield",
-    color: "from-indigo-600 to-indigo-900",
-  },
-  {
-    id: "voidweaver",
-    name: "Voidweaver",
-    description: "Controla la energía del vacío para destruir o proteger.",
-    icon: "sparkles",
-    color: "from-purple-600 to-purple-900",
-  },
-  {
-    id: "phantasm",
-    name: "Phantasm",
-    description: "Un asesino veloz que se desliza entre las sombras.",
-    icon: "ghost",
-    color: "from-pink-600 to-pink-900",
-  },
-];
+const API_BASE_URL = "http://localhost:3030/api";
+interface Passive {
+  name: string;
+  description: string;
+  detail?: string;
+}
+
+interface Subclass {
+  name: string;
+  iconName: string;
+  imageSubclassUrl?: string;
+  passives: Passive[];
+}
+
+interface GameClass {
+  _id: string;
+  name: string;
+  description: string;
+  iconName: string;
+  imageMainClassUrl: string;
+  passiveDefault: Passive;
+  subclasses: Subclass[];
+}
 
 const ClassSelection = () => {
+  const [classes, setClasses] = useState<GameClass[]>([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const classChosen = localStorage.getItem("classChosen");
-    const selectedClass = localStorage.getItem("selectedClass");
-
-    if (classChosen === "true" && selectedClass) {
-      navigate("/game");
-    } else {
+  const fetchClasses = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/character/classes`);
+      setClasses(res.data);
+    } catch (err) {
+      console.error("Error al cargar clases:", err);
+    } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  };
 
   const handleClassSelect = (classId: string) => {
-    setLoading(true);
     localStorage.setItem("selectedClass", classId);
     localStorage.setItem("classChosen", "true");
     navigate("/register");
   };
 
+  useEffect(() => {
+    fetchClasses();
+  }, []);
+
   if (loading) {
-    // Spinner elegante mientras redirige o carga
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
-        <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500"></div>
-          <p className="mt-4 text-white text-lg">Cargando...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center text-white">
+        Cargando clases...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-900 to-black text-white flex flex-col items-center justify-center px-4 py-10">
+      <h1 className="text-5xl font-serif font-bold mb-4 text-center tracking-wider">
+        Escoge tu Destino
+      </h1>
+      <p className="mb-10 text-gray-400 text-center">
+        Cuatro caminos. Una guerra eterna. Elige con sabiduría...
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl w-full">
         {classes.map((cls) => (
           <div
-            key={cls.id}
-            className={cn(
-              "dark-panel text-white p-6 cursor-pointer hover:scale-105 transition-transform",
-              `bg-gradient-to-br ${cls.color}`,
-              loading ? "pointer-events-none opacity-60" : ""
-            )}
-            onClick={() => !loading && handleClassSelect(cls.id)}
+            key={cls._id}
+            onClick={() => handleClassSelect(cls.name)}
+            className="relative group cursor-pointer rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition duration-300 border border-gray-800 bg-cover bg-center"
+            style={{
+              backgroundImage: `url(${cls.imageMainClassUrl})`,
+              height: "460px",
+            }}
           >
-            <Card>
-              <div className="flex flex-col items-center gap-4">
-                <div className="text-4xl">
-                  <i className={`lucide lucide-${cls.icon}`}></i>
-                </div>
-                <h2 className="text-xl font-bold">{cls.name}</h2>
-                <p className="text-sm text-gray-200 text-center">
-                  {cls.description}
-                </p>
-                <Button className="mt-4 w-full" disabled={loading}>
-                  {loading ? "Procesando..." : `Elegir ${cls.name}`}
-                </Button>
-              </div>
-            </Card>
+            {/* Overlay oscuro para contraste */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent z-0"></div>
+
+            {/* Contenido centrado */}
+            <div className="relative z-10 flex flex-col justify-end h-full p-6 text-center">
+              <h2 className="text-2xl font-bold font-serif mb-2">{cls.name}</h2>
+              <p className="text-sm text-gray-300 mb-4">{cls.description}</p>
+              <button className="w-full py-2 bg-gray-900/80 hover:bg-gray-800 text-white font-semibold rounded transition duration-300">
+                Elegir {cls.name}
+              </button>
+            </div>
           </div>
         ))}
       </div>

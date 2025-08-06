@@ -46,36 +46,11 @@ export const classes: GameClass[] = [
           {
             name: "Defensa Absoluta",
             description:
-              "Incrementa la defensa física cuando se encuentra por debajo del 50% de vida.",
-          },
-          {
-            name: "Aura Sagrada",
-            description: "Regenera vida lentamente a aliados cercanos.",
-          },
-          {
-            name: "Escudo de Luz",
-            description: "Reduce daño mágico recibido.",
-          },
-          {
-            name: "Guardia Implacable",
-            description: "Reduce duración de aturdimientos.",
-          },
-          {
-            name: "Fortaleza del Espíritu",
-            description: "Incrementa resistencia a efectos de control.",
-          },
-          {
-            name: "Bendición de Coraje",
-            description:
-              "Incrementa la moral y fuerza de ataque a aliados cercanos.",
-          },
-          {
-            name: "Rebote de Escudo",
-            description: "Chance de reflejar parte del daño recibido.",
+              "Incrementa 15% la defensa física cuando se encuentra por debajo del 30% de vida.",
           },
           {
             name: "Resistencia Inquebrantable",
-            description: "Reduce daño crítico recibido.",
+            description: "Reduce 15% el daño crítico recibido.",
           },
         ],
       },
@@ -85,36 +60,12 @@ export const classes: GameClass[] = [
         passives: [
           {
             name: "Ira Desatada",
-            description: "+15% daño con espada de dos manos.",
+            description: "+15% daño físico con espada de dos manos.",
           },
           {
             name: "Carga Brutal",
-            description: "Primer golpe tras moverse hace más daño.",
-          },
-          {
-            name: "Golpe Sísmico",
-            description: "Chance de aturdir con ataques pesados.",
-          },
-          {
-            name: "Furia Incontenible",
             description:
-              "Aumenta la velocidad de ataque cuando está en combate.",
-          },
-          {
-            name: "Maestría en Espada",
-            description: "Incrementa daño crítico con espadas.",
-          },
-          {
-            name: "Sangre de Batalla",
-            description: "Restaura vida proporcional al daño infligido.",
-          },
-          {
-            name: "Golpe Demoledor",
-            description: "Rompe armadura enemiga.",
-          },
-          {
-            name: "Corazón de Hierro",
-            description: "Reduce daño recibido de ataques físicos.",
+              "Primer golpe tras moverse hace 15% más de daño físico.",
           },
         ],
       },
@@ -125,7 +76,7 @@ export const classes: GameClass[] = [
     icon: <Flame className="text-purple-500" />,
     passiveDefault: {
       name: "Llama Interna",
-      description: "Aumenta el daño de fuego con el tiempo.",
+      description: "Aumenta el daño elemental con el tiempo.",
     },
     subclasses: [
       {
@@ -137,32 +88,8 @@ export const classes: GameClass[] = [
             description: "Provoca explosión al acumular quemaduras.",
           },
           {
-            name: "Llama Perpetua",
-            description: "Daño de fuego aumenta con el tiempo.",
-          },
-          {
-            name: "Fuego Interior",
-            description: "Regenera maná mientras está en combate.",
-          },
-          {
-            name: "Pirotecnia",
-            description: "Aumenta radio de área de los hechizos.",
-          },
-          {
             name: "Chispa Divina",
             description: "Chance de lanzar una llamarada extra.",
-          },
-          {
-            name: "Corazón Ardiente",
-            description: "Resiste el daño de fuego.",
-          },
-          {
-            name: "Combustión",
-            description: "Los enemigos afectados reciben daño extra.",
-          },
-          {
-            name: "Espíritu Ígneo",
-            description: "Incrementa daño crítico de fuego.",
           },
         ],
       },
@@ -171,36 +98,13 @@ export const classes: GameClass[] = [
         icon: <Snowflake className="text-blue-400" />,
         passives: [
           {
-            name: "Viento Invernal",
-            description: "Ralentiza enemigos con cada hechizo.",
-          },
-          {
-            name: "Corazón Gélido",
-            description: "Reduce daño recibido de enemigos congelados.",
-          },
-          {
-            name: "Escudo de Hielo",
-            description: "Absorbe daño por tiempo limitado.",
-          },
-          {
             name: "Aliento Glacial",
             description: "Chance de congelar enemigos.",
           },
           {
-            name: "Frío Implacable",
-            description: "Incrementa duración de ralentización.",
-          },
-          {
-            name: "Espiral de Nieve",
-            description: "Hechizos en área tienen efecto en cadena.",
-          },
-          {
-            name: "Manto Ártico",
-            description: "Incrementa defensa mágica.",
-          },
-          {
-            name: "Pacto de Escarcha",
-            description: "Regenera maná al infligir daño con hielo.",
+            name: "Reacción Glacial",
+            description:
+              "Al recibir un golpe crítico, se activa automáticamente un escudo de hielo que bloquea el siguiente ataque.",
           },
         ],
       },
@@ -211,7 +115,7 @@ export const classes: GameClass[] = [
     icon: <Ghost className="text-green-500" />,
     passiveDefault: {
       name: "Sombra Letal",
-      description: "Aumenta el daño de ataques por la espalda.",
+      description: "30% de incremento en daño crítico.",
     },
     subclasses: [
       {
@@ -219,36 +123,13 @@ export const classes: GameClass[] = [
         icon: <Ghost className="text-gray-400" />,
         passives: [
           {
-            name: "Paso Silencioso",
-            description: "Reduce la detección por enemigos.",
-          },
-          {
-            name: "Golpe Mortal",
-            description: "Crítico garantizado al salir de sigilo.",
-          },
-          {
-            name: "Sombra Veloz",
-            description: "Aumenta velocidad al estar en sigilo.",
-          },
-          {
-            name: "Asesinato Preciso",
-            description: "Daño extra si el enemigo está debilitado.",
-          },
-          {
-            name: "Eco Fantasma",
-            description: "Ataca rápido después de un golpe crítico.",
-          },
-          {
-            name: "Huida Sombría",
-            description: "Incrementa evasión tras salir de combate.",
-          },
-          {
             name: "Veneno Letal",
             description: "Aplica veneno que hace daño con el tiempo.",
           },
           {
-            name: "Instinto Predador",
-            description: "Incrementa daño crítico.",
+            name: "Toxina Paralizante",
+            description:
+              "Los enemigos envenenados tienen una probabilidad de quedar inmovilizados brevemente.",
           },
         ],
       },
@@ -258,36 +139,12 @@ export const classes: GameClass[] = [
         passives: [
           {
             name: "Reflejo Fantasmal",
-            description: "Probabilidad de evadir ataques mientras se mueve.",
+            description: "Probabilidad de evadir ataques.",
           },
           {
-            name: "Danza Letal",
-            description: "Aumenta daño mientras se mueve.",
-          },
-          {
-            name: "Velocidad Espectral",
-            description: "Incrementa movimiento tras esquivar.",
-          },
-          {
-            name: "Espíritu Errante",
-            description: "Chance de evitar control de masas.",
-          },
-          {
-            name: "Desvanecimiento",
-            description: "Regenera vida al evadir un ataque.",
-          },
-          {
-            name: "Golpe Fantasma",
-            description: "Daño extra al atacar desde atrás.",
-          },
-          {
-            name: "Sombra Viva",
-            description: "Reduce enfriamientos de habilidades.",
-          },
-          {
-            name: "Espíritu Ágil",
+            name: "Contraataque Sombrío",
             description:
-              "Incrementa ataque crítico mientras está en movimiento.",
+              "Tras evadir con éxito, tu próximo ataque es un golpe crítico garantizado.",
           },
         ],
       },
@@ -298,7 +155,7 @@ export const classes: GameClass[] = [
     icon: <GiBowArrow className="text-yellow-600" />,
     passiveDefault: {
       name: "Ojo del Águila",
-      description: "Aumenta el daño y precisión con arcos.",
+      description: "Aumenta el daño con el tiempo.",
     },
     subclasses: [
       {
@@ -306,33 +163,9 @@ export const classes: GameClass[] = [
         icon: <Target className="text-yellow-400" />,
         passives: [
           {
-            name: "Disparo Concentrado",
-            description: "Incrementa el daño crítico con arcos.",
-          },
-          {
-            name: "Puntería Letal",
-            description: "Aumenta el daño al impactar en puntos débiles.",
-          },
-          {
-            name: "Respiración Controlada",
-            description:
-              "Reduce el retroceso y mejora la estabilidad del disparo.",
-          },
-          {
-            name: "Silencio Mortal",
-            description: "Los ataques no alertan a enemigos cercanos.",
-          },
-          {
-            name: "Ojo de Águila",
-            description: "Aumenta el rango efectivo del arco.",
-          },
-          {
             name: "Pulso Preciso",
-            description: "Disparos cargados infligen daño crítico garantizado.",
-          },
-          {
-            name: "Flecha Explosiva",
-            description: "Chance de explosión que daña a enemigos cercanos.",
+            description:
+              "Realiza un disparo cargado que inflige daño crítico garantizado.",
           },
           {
             name: "Reflejo Ágil",
@@ -341,40 +174,18 @@ export const classes: GameClass[] = [
         ],
       },
       {
-        name: "Trampero de Bosque",
+        name: "Sanguinario del Linde",
         icon: <FaSpider className="text-green-500" />,
         passives: [
           {
-            name: "Trampa Maestra",
-            description: "Incrementa daño y duración de trampas.",
+            name: "Olor a sangre",
+            description:
+              "Inflige más daño a enemigos que están por debajo del 50% de vida",
           },
           {
-            name: "Acecho Silencioso",
-            description: "Aumenta el daño al atacar desde sigilo.",
-          },
-          {
-            name: "Red de Lianas",
-            description: "Las trampas ralentizan y enredan a los enemigos.",
-          },
-          {
-            name: "Conocimiento Natural",
-            description: "Mejora evasión en terrenos boscosos.",
-          },
-          {
-            name: "Danza de la Araña",
-            description: "Aumenta velocidad de ataque tras activar trampas.",
-          },
-          {
-            name: "Precisión Letal",
-            description: "Incrementa daño crítico al usar trampas.",
-          },
-          {
-            name: "Sombra de la Selva",
-            description: "Mejora evasión mientras está en terreno natural.",
-          },
-          {
-            name: "Instinto de Cazador",
-            description: "Incrementa daño crítico mientras está en sigilo.",
+            name: "Tiro Venenoso",
+            description:
+              "Dispara una flecha que inflige daño de veneno con el tiempo.",
           },
         ],
       },

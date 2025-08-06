@@ -1,27 +1,26 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
+import { useAuth } from "~/context/AuthContext";
+import GlobalSpinner from "../components/GlobalSpinner";
 
 const StartupRedirect = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, classChosen, authLoading } = useAuth();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const classChosen = localStorage.getItem("classChosen");
+    if (authLoading) return; // No redirigir hasta que se cargue el estado
 
-    if (!token && !classChosen) {
-      // Usuario completamente nuevo
-      navigate("/select-class");
-    } else if (!token && classChosen === "true") {
-      // Ya eligió clase pero no está registrado todavía
-      navigate("/register");
-    } else if (token && classChosen === "true") {
-      // Usuario registrado y con clase
-      navigate("/game");
-    } else if (token && classChosen !== "true") {
-      // Usuario registrado pero no eligió clase aún
-      navigate("/select-class");
+    if (!isAuthenticated) {
+      navigate(classChosen ? "/register" : "/select-class");
+    } else {
+      navigate(classChosen ? "/game" : "/select-class");
     }
-  }, [navigate]);
+  }, [isAuthenticated, classChosen, authLoading, navigate]);
+
+  // Mostrar spinner mientras se carga el estado de autenticación
+  if (authLoading) {
+    return <GlobalSpinner />;
+  }
 
   return null;
 };
