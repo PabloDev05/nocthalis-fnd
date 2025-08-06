@@ -1,14 +1,152 @@
 @import "tailwindcss";
 
- /* @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
-    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-} 
- html,
-body {
-  @apply bg-white dark:bg-gray-950;
+/* @theme {
+  --font-family-gothic: "Cinzel", serif;
+} */
 
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
+@layer base {
+  body {
+    /* font-family: var(--font-family-gothic);  */
+    background: radial-gradient(ellipse at center, #0d1117 0%, #000000 70%);
   }
-}   */
+}
+
+
+@layer components {
+  .dark-panel {
+    background-color: rgba(17, 24, 39, 0.9); /* bg-gray-900/90 */
+    border-width: 1px; /* border */
+    border-color: #374151; /* border-gray-700 */
+    border-radius: 0.5rem; /* rounded-lg */
+    backdrop-filter: blur(4px); /* backdrop-blur-sm */
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+  }
+
+  /* Botón gótico con bordes angulares como en la imagen */
+  .gothic-button {
+    position: relative;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #2b2a6c 0%, #1a1625 50%, #0f0a15 100%);
+    border: 1px solid #101968;
+    color: #e5e5f0;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    overflow: hidden;
+
+    /* Bordes angulares como en la imagen */
+    /* clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%); */
+
+    /* Sombra y brillo */
+    box-shadow: inset 0 1px 0 rgba(139, 92, 246, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.8),
+      0 0 0 1px rgba(139, 92, 246, 0.1);
+  }
+
+  /* Efecto de brillo interno */
+  .gothic-button::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.1), transparent);
+    transition: left 0.6s ease;
+  }
+
+  /* Hover effect */
+  .gothic-button:hover {
+    background: linear-gradient(135deg, #3d2a5c 0%, #2a1f3d 50%, #1a1625 100%);
+    border-color: #18093c;
+    color: #f3f4f6;
+
+    box-shadow:
+      inset 0 1px 0 rgba(139, 92, 246, 0.4),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.6),
+      0 4px 16px rgba(0, 0, 0, 0.9),
+      0 0 0 1px rgba(151, 131, 198, 0.3),
+      0 0 20px rgba(150, 24, 114, 0.15);
+  }
+
+  .gothic-button:hover::before {
+    left: 100%;
+  }
+
+  /* Estado activo */
+  .gothic-button.active {
+    background: linear-gradient(135deg, #5b129bd1 20%, #0a1963b3 100%);
+    border-color: #000000;
+    color: #f8fafc;
+
+    box-shadow:
+      inset 0 1px 0 rgba(196, 181, 253, 0.3),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.7),
+      0 4px 16px rgba(0, 0, 0, 0.9),
+      0 0 0 1px rgba(78, 71, 16, 0.227),
+      0 0 25px rgba(139, 92, 246, 0.25);
+  }
+
+  /* Slots de equipamiento */
+  .equipment-slot {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, #1f1f23 0%, #0f0f14 100%);
+    border: 2px solid #404040;
+    cursor: pointer;
+    transition: all 0.3s ease;
+
+    /* Bordes angulares más sutiles */
+    /* clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%); */
+
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -1px 0 rgba(0, 0, 0, 0.8), 0 2px 8px rgba(0, 0, 0, 0.9);
+  }
+
+  .equipment-slot:hover {
+    border-color: #6b7280;
+    background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
+    transform: translateY(-2px);
+
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.9), 0 4px 16px rgba(0, 0, 0, 0.9),
+      0 0 15px rgba(107, 114, 128, 0.2);
+  }
+
+
+ .stat-text {
+    color: #d0d5e0;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.9);
+  }
+  .stat-text-muted {
+    color: #9ca3af;
+  }
+
+  .stat-text-accent {
+    color: #d1d5db; 
+  }
+
+  .stat-text-purple {
+    color: #8c7feffe; 
+  }
+
+  .gothic-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #606080 #2a2a2a;
+  }
+
+  .gothic-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .gothic-scroll::-webkit-scrollbar-track {
+    background: #2a2a2a;
+    border-radius: 4px;
+  }
+
+  .gothic-scroll::-webkit-scrollbar-thumb {
+    background: #606080;
+    border-radius: 4px;
+  }
+
+  .gothic-scroll::-webkit-scrollbar-thumb:hover {
+    background: #808090;
+  }
+}
