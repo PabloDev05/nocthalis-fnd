@@ -5,14 +5,16 @@ type AuthContextType = {
   user: string | null;
   token: string | null;
   classChosen: boolean;
-  characterClass: string | null;
+  characterClassName: string | null; // para UI (p. ej. "Guerrero")
+  characterClassId: string | null; // ObjectId real
   isAuthenticated: boolean;
   authLoading: boolean;
   login: (
     token: string,
     user: string,
     classChosen: boolean,
-    characterClass: string
+    characterClassName: string | null,
+    characterClassId: string | null
   ) => void;
   logout: () => void;
 };
@@ -24,19 +26,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [classChosen, setClassChosen] = useState<boolean>(false);
-  const [characterClass, setCharacterClass] = useState<string | null>(null);
+  const [characterClassName, setCharacterClassName] = useState<string | null>(
+    null
+  );
+  const [characterClassId, setCharacterClassId] = useState<string | null>(null);
 
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
     const storedUser = localStorage.getItem("user");
     const storedClassChosen = localStorage.getItem("classChosen");
-    const storedClass = localStorage.getItem("selectedClass");
+    const storedClassName = localStorage.getItem("characterClassName");
+    const storedClassId = localStorage.getItem("characterClassId");
 
     if (storedToken && storedUser) {
       setToken(storedToken);
       setUser(storedUser);
       setClassChosen(storedClassChosen === "true");
-      setCharacterClass(storedClass || null);
+      setCharacterClassName(storedClassName || null);
+      setCharacterClassId(storedClassId || null);
     }
 
     setAuthLoading(false);
@@ -46,27 +53,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     newToken: string,
     newUser: string,
     newClassChosen: boolean,
-    newCharacterClass: string
+    newCharacterClassName: string | null,
+    newCharacterClassId: string | null
   ) => {
     setToken(newToken);
     setUser(newUser);
     setClassChosen(newClassChosen);
-    setCharacterClass(newCharacterClass);
+    setCharacterClassName(newCharacterClassName);
+    setCharacterClassId(newCharacterClassId);
     localStorage.setItem("token", newToken);
     localStorage.setItem("user", newUser);
-    localStorage.setItem("classChosen", String(newClassChosen));
-    localStorage.setItem("selectedClass", newCharacterClass);
+    localStorage.setItem("classChosen", String(newClassChosen)); // ← esto debe quedar "true"
+    if (newCharacterClassName) {
+      localStorage.setItem("characterClassName", newCharacterClassName);
+    } else {
+      localStorage.removeItem("characterClassName");
+    }
+    if (newCharacterClassId) {
+      localStorage.setItem("characterClassId", newCharacterClassId);
+    } else {
+      localStorage.removeItem("characterClassId");
+    }
   };
 
   const logout = () => {
     setToken(null);
     setUser(null);
     setClassChosen(false);
-    setCharacterClass(null);
+    setCharacterClassName(null);
+    setCharacterClassId(null);
+
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("classChosen");
-    localStorage.removeItem("selectedClass");
+    localStorage.removeItem("characterClassName");
+    localStorage.removeItem("characterClassId");
   };
 
   const isAuthenticated = !!token;
@@ -77,7 +98,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user,
         token,
         classChosen,
-        characterClass,
+        characterClassName,
+        characterClassId,
         authLoading,
         isAuthenticated,
         login,

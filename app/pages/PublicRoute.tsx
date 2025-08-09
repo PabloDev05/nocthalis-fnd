@@ -1,8 +1,8 @@
-/* Proteje las rutas públicas (/login y /register) para que no sean accesibles si el usuario ya está logueado y tiene clase elegida */
+// src/components/PublicRoute.tsx
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router";
-import GlobalSpinner from "~/components/GlobalSpinner";
+import GlobalSpinner from "../components/GlobalSpinner";
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   const { token, classChosen, authLoading } = useAuth();
@@ -13,7 +13,7 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
     if (authLoading) return;
 
     if (token && classChosen) {
-      navigate("/game");
+      navigate("/game", { replace: true });
     } else {
       setCanRender(true);
     }

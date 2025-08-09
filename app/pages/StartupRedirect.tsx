@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
-import { useAuth } from "~/context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 import GlobalSpinner from "../components/GlobalSpinner";
 
 const StartupRedirect = () => {
@@ -11,16 +11,13 @@ const StartupRedirect = () => {
     if (authLoading) return;
 
     if (!isAuthenticated) {
-      navigate("/login");
+      navigate("/login", { replace: true });
     } else {
-      navigate(classChosen ? "/game" : "/select-class");
+      navigate(classChosen ? "/game" : "/select-class", { replace: true });
     }
   }, [isAuthenticated, classChosen, authLoading, navigate]);
 
-  // Mostrar spinner mientras se carga el estado de autenticación
-  if (authLoading) {
-    return <GlobalSpinner />;
-  }
+  if (authLoading) return <GlobalSpinner />;
 
   return null;
 };
