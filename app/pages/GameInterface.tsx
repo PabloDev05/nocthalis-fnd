@@ -1,22 +1,11 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { useAuth } from "../context/AuthContext";
 import {
-  Crown,
   Sword,
   Shield,
-  Gem,
-  Star,
-  Trophy,
   Settings,
-  MessageSquare,
-  Package,
-  Castle,
   Swords,
-  Skull,
-  Church,
-  Map,
-  ShoppingCart,
-  FlaskRoundIcon as Flask,
-  Droplet,
   User,
   Zap,
   Plus,
@@ -30,162 +19,235 @@ import {
   BellRingIcon as Ring,
   Info,
   Flame,
+  Trophy,
+  Star,
+  FlaskConical as Flask,
 } from "lucide-react";
+import type { CharacterApi, EquipmentSlot } from "../../types/character";
 
-interface Item {
-  id: string;
-  name: string;
-  imageUrl: string;
-  attributes: Record<string, any>;
-}
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3030/api";
 
-interface Character {
-  name: string;
-  level: number;
-  class: string;
-  stats: {
-    strength: number;
-    dexterity: number;
-    willpower: number;
-    constitution: number;
-    charisma: number;
-  };
-  combat: {
-    damage: string;
-    attack: number;
-    roar: number;
-    vitality: number;
-    influence: number;
-  };
-  resources: {
-    gold: number;
-    blood: number;
-  };
-  equipment: {
-    head: Item | null;
-    chest: Item | null;
-    gloves: Item | null;
-    boots: Item | null;
-    amulet: Item | null;
-    belt: Item | null;
-    ring: Item | null;
-    mainWeapon: Item | null;
-    offHandWeapon: Item | null;
-  };
-}
-
-// Simulo "base de datos" de items
-const itemsDB: Record<string, Item> = {
-  helmet: {
-    id: "helmet",
-    name: "Iron Helmet",
-    imageUrl:
-      "https://media.craiyon.com/2025-04-08/XEwg2s5OT-2XFlVB9pVroQ.webp",
-    attributes: { defense: 10 },
-  },
-  armor: {
-    id: "armor",
-    name: "Steel Armor",
-    imageUrl: "https://pics.craiyon.com/2025-07-20/sK4sHD-oSByf8tNKjmqKlA.webp",
-    attributes: { defense: 25 },
-  },
-  sword: {
-    id: "sword",
-    name: "sword_normal_1",
-    imageUrl: "https://pics.craiyon.com/2025-07-20/SNR36OLIRpaRS7a0YqnIIA.webp",
-    attributes: { damage: 15 },
-  },
-  // ... otros items
-};
-
-// Menú del juego
-const menuItems = [
-  { id: "character", label: "CHARACTER", icon: User },
-  { id: "messages", label: "MESSAGES", icon: MessageSquare },
-  { id: "pack", label: "PACK", icon: Backpack },
-  { id: "hall-of-fame", label: "HALL OF FAME", icon: Trophy },
-  { id: "options", label: "OPTIONS", icon: Settings },
-  { id: "castle", label: "CASTLE", icon: Castle },
-  { id: "arena", label: "ARENA", icon: Swords },
-  { id: "gravedigger", label: "GRAVEDIGGER", icon: Skull },
-  { id: "sanctuary", label: "SANCTUARY", icon: Church },
-  { id: "world-map", label: "WORLD MAP", icon: Map },
-  { id: "weapons-shop", label: "WEAPONS SHOP", icon: ShoppingCart },
-  { id: "laboratory", label: "LABORATORY", icon: Flask },
-  { id: "blood-stones", label: "BLOOD STONES", icon: Droplet },
+// Orden visible de Character Stats (izquierda de las 5 filas)
+const STATS_LEFT_5: (keyof CharacterApi["stats"])[] = [
+  "strength",
+  "agility",
+  "vitality",
+  "endurance",
+  "luck",
 ];
 
-// Componente principal del juego
-export default function GameInterfaceCopy() {
+// Resistencias (sin critical reductions)
+const ORDERED_RESIST: (keyof CharacterApi["resistances"])[] = [
+  "fire",
+  "ice",
+  "lightning",
+  "poison",
+  "sleep",
+  "paralysis",
+  "confusion",
+  "fear",
+  "dark",
+  "holy",
+  "stun",
+  "bleed",
+  "curse",
+  "knockback",
+];
+
+// Orden completo de combat para calcular qué queda en el bloque de la izquierda
+const ORDERED_COMBAT: (keyof NonNullable<CharacterApi["combatStats"]>)[] = [
+  "maxHP",
+  "maxMP",
+  "attackPower",
+  "magicPower",
+  "criticalChance",
+  "criticalDamageBonus",
+  "attackSpeed",
+  "evasion",
+  "blockChance",
+  "blockValue",
+  "lifeSteal",
+  "manaSteal",
+  "damageReduction",
+  "movementSpeed",
+];
+
+// /character/progression
+type ProgressionApi = {
+  level: number;
+  experience: number;
+  nextLevelAt: number;
+  xpToNext: number;
+};
+
+function labelize(key: string) {
+  return key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+}
+
+const EquipmentSlotView = ({
+  slot,
+  icon: Icon,
+  itemId,
+}: {
+  slot: EquipmentSlot;
+  icon: any;
+  itemId: string | null;
+}) => (
+  <div
+    className="equipment-slot flex items-center justify-center"
+    title={itemId ?? slot}
+  >
+    <Icon className="w-10 h-10 text-gray-500" />
+  </div>
+);
+
+// Elegimos Attack/Magic como “principal” y escondemos el otro
+function pickPrimaryPower(data?: CharacterApi | null): {
+  key: "attackPower" | "magicPower";
+  label: string;
+  isMage: boolean;
+} {
+  const name =
+    ((data as any)?.class?.name as string | undefined)?.toLowerCase() ??
+    (data?.className ?? "").toLowerCase();
+  const isMage = /mago|mage|wizard|sorcer/i.test(name);
+  if (!data?.combatStats)
+    return {
+      key: isMage ? "magicPower" : "attackPower",
+      label: isMage ? "Magic Power" : "Attack Power",
+      isMage,
+    };
+  const { attackPower = 0, magicPower = 0 } = data.combatStats;
+  if (isMage || magicPower > attackPower) {
+    return { key: "magicPower", label: "Magic Power", isMage: true };
+  }
+  return { key: "attackPower", label: "Attack Power", isMage: false };
+}
+
+export default function GameInterface() {
+  const { token } = useAuth();
+
   const [activeMenu, setActiveMenu] = useState("character");
+  const [data, setData] = useState<CharacterApi | null>(null);
+  const [progression, setProgression] = useState<ProgressionApi | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Datos del personaje
-  const character: Character = {
-    name: "dwarlordus",
-    level: 10,
-    class: "Werewolf Mutt",
-    stats: {
-      strength: 117,
-      dexterity: 46,
-      willpower: 52,
-      constitution: 110,
-      charisma: 39,
-    },
-    combat: {
-      damage: "267 - 546",
-      attack: 160,
-      roar: 520,
-      vitality: 1125,
-      influence: 29,
-    },
-    resources: {
-      gold: 1600,
-      blood: 33,
-    },
-    equipment: {
-      head: itemsDB.helmet,
-      chest: itemsDB.armor,
-      gloves: null,
-      boots: null,
-      amulet: null,
-      belt: null,
-      ring: null,
-      mainWeapon: itemsDB.sword,
-      offHandWeapon: null,
-    },
-  };
+  const client = useMemo(() => {
+    const instance = axios.create({
+      baseURL: API_BASE,
+      headers: { "Content-Type": "application/json" },
+    });
+    instance.interceptors.request.use((cfg) => {
+      if (token)
+        cfg.headers = {
+          ...cfg.headers,
+          Authorization: `Bearer ${token}`,
+        } as any;
+      return cfg;
+    });
+    return instance;
+  }, [token]);
 
-  const EquipmentSlot = ({ type, icon: Icon, item }: any) => (
-    <div
-      className="equipment-slot flex items-center justify-center w-23 h-23 bg-gray-700 rounded-lg"
-      title={item ? item.name : type}
-    >
-      {item && item.imageUrl ? (
-        <img
-          src={item.imageUrl}
-          alt={item.name}
-          className="w-20 h-20 object-contain"
-        />
-      ) : (
-        <Icon className="w-10 h-10 text-gray-500" />
-      )}
-    </div>
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+
+    Promise.all([
+      client.get<CharacterApi>("/character/me"),
+      client.get<ProgressionApi>("/character/progression").catch((e) => {
+        console.warn("GET /character/progression failed:", e?.response ?? e);
+        return { data: null as any };
+      }),
+    ])
+      .then(([meRes, progRes]) => {
+        if (!mounted) return;
+        console.log("GET /character/me status:", meRes.status);
+        console.log("GET /character/me data:", meRes.data);
+        if (progRes?.data)
+          console.log("GET /character/progression data:", progRes.data);
+        setData(meRes.data);
+        setProgression(progRes?.data ?? null);
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        console.error("Character load error:", err?.response ?? err);
+        setError(
+          err?.response?.data?.message ||
+            err.message ||
+            "Error fetching character"
+        );
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [client]);
+
+  const menuItems = [
+    { id: "character", label: "CHARACTER", icon: User, disabled: false },
+    { id: "options", label: "OPTIONS", icon: Settings, disabled: true },
+    { id: "arena", label: "ARENA", icon: Swords, disabled: true },
+  ] as const;
+
+  // Extra Info
+  const lvl = progression?.level ?? data?.level ?? "—";
+  const exp = progression?.experience ?? data?.experience ?? 0;
+  const clazz = (data as any)?.class as
+    | {
+        name?: string;
+        description?: string;
+        passiveDefault?: { name: string; description: string };
+      }
+    | undefined;
+  const className = clazz?.name ?? data?.className ?? "—";
+
+  // Combat destacados (derecha), en el orden pedido
+  const p = pickPrimaryPower(data);
+  const RIGHT_FEATURED: Array<{
+    key: keyof NonNullable<CharacterApi["combatStats"]>;
+    label?: string;
+  }> = [
+    { key: p.key, label: p.label }, // Strength ↔ Attack/Magic
+    { key: "evasion" }, // Agility ↔ Evasion
+    { key: "blockChance" }, // Vitality ↔ Block Chance
+    { key: "damageReduction" }, // Endurance ↔ Damage Reduction
+    { key: "criticalChance" }, // Luck ↔ Critical Chance
+  ];
+
+  // Combat “resto” (izquierda): quitamos los 5 de la derecha y también el poder contrario (para no repetir)
+  const combatRest = ORDERED_COMBAT.filter(
+    (k) =>
+      !RIGHT_FEATURED.some((r) => r.key === k) &&
+      k !== (p.isMage ? "attackPower" : "magicPower")
   );
 
-  return (
-    <div className="min-h-screen text-sm leading-tight space-y-2 bg-gradient-to-br from-gray-900 via-black to-gray-800 relative">
-      {/* Fondo oscuro */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black/90"></div>
+  // Pasivas desbloqueadas sin duplicar la default
+  const unlockedUnique = (() => {
+    const base = data?.passivesUnlocked ?? [];
+    const exclude = clazz?.passiveDefault?.name?.toLowerCase();
+    const set = new Set<string>();
+    base.forEach((name) => {
+      const k = (name || "").toLowerCase();
+      if (exclude && k === exclude) return;
+      if (!set.has(k)) set.add(name);
+    });
+    return Array.from(set);
+  })();
 
-      {/* Header del juego */}
+  return (
+    <div className="min-h-screen text-sm leading-tight space-y-2 bg-[var(--bg)] relative">
+      {/* Navbar original */}
       <header className="relative z-10 dark-panel m-4 p-4 flex justify-between items-center">
         <div className="flex items-center space-x-8">
           <h1 className="text-3xl font-bold stat-text tracking-wide font-serif">
             Nocthalis
           </h1>
-          <div className="text-sm stat-text-muted">
-            <span className="text-red-400">●</span> Souls Online: 1,247
-          </div>
         </div>
         <nav className="flex space-x-6 text-sm">
           {[
@@ -208,17 +270,31 @@ export default function GameInterfaceCopy() {
       </header>
 
       <div className="relative z-10 flex h-[calc(100vh-40px)]">
-        {/* Menú lateral izquierdo */}
-        <aside className="w-59 h-215 p-2 space-y-1 bg-gray-800/60 ml-1 rounded-lg shadow-lg">
+        {/* Menú lateral */}
+        <aside className="w-59 h-215 p-2 space-y-1 ml-1 rounded-lg shadow-lg border border-[var(--border)] bg-[var(--panel-2)]">
           {menuItems.map((item) => {
-            const Icon = item.icon;
+            const Icon = item.icon as any;
+            const isActive = activeMenu === item.id;
+            const common =
+              "w-full gothic-button flex items-center space-x-4 text-left";
+            if (item.disabled) {
+              return (
+                <div
+                  key={item.id}
+                  aria-disabled
+                  className={`${common} opacity-50 cursor-not-allowed`}
+                  title={`${item.label} (próximamente)`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="text-sm font-medium">{item.label}</span>
+                </div>
+              );
+            }
             return (
               <button
                 key={item.id}
                 onClick={() => setActiveMenu(item.id)}
-                className={`w-full gothic-button flex items-center space-x-4 text-left ${
-                  activeMenu === item.id ? "active" : ""
-                }`}
+                className={`${common} ${isActive ? "active" : ""}`}
               >
                 <Icon className="w-5 h-5" />
                 <span className="text-sm font-medium">{item.label}</span>
@@ -230,275 +306,335 @@ export default function GameInterfaceCopy() {
         {/* Contenido principal */}
         <main className="flex-1 space-y-4">
           <div className="grid grid-cols-3 gap-1 h-[calc(100%-40px)]">
-            {/* Panel combinado: personaje + stats */}
-            <div className="col-span-2 dark-panel p-3 flex flex-col ml-1">
-              {/* Info principal */}
-              <div className="flex items-center space-x-3 mb-6">
-                <div className="w-10 h-10 bg-gradient-to-br from-red-700 to-red-900 rounded-full flex items-center justify-center">
-                  <Skull className="w-6 h-6 text-red-200" />
-                </div>
-                <span className="stat-text font-semibold text-lg">
-                  {character.class}
-                </span>
-              </div>
+            {/* CONTENEDOR IZQUIERDO “lindo” */}
+            <div className="col-span-2 ml-1">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel-2)] p-4 space-y-6 shadow-lg">
+                {loading && (
+                  <div className="card-muted p-4 text-sm stat-text-muted">
+                    Cargando personaje…
+                  </div>
+                )}
+                {error && !loading && (
+                  <div className="card-muted p-4 text-sm text-red-400">
+                    {error}
+                  </div>
+                )}
 
-              {/* 🔍 Información extra + 💥 Habilidades */}
-              <div className="grid grid-cols-2 gap-6 mb-6">
-                {/* 🔍 Info extra */}
-                <div className="bg-gray-800/60 p-4 rounded-xl">
-                  <h3 className="stat-text font-semibold mb-4 flex items-center text-lg">
-                    <Info className="w-5 h-5 mr-3 text-blue-400" />
-                    Extra Info
-                  </h3>
-                  <ul className="text-sm space-y-2 stat-text-muted">
-                    <li>
-                      <strong>Raza:</strong> Human
-                    </li>
-                    <li>
-                      <strong>Origen:</strong> Northern Wastes
-                    </li>
-                    <li>
-                      <strong>Afiliación:</strong> "Order of the Flame
-                    </li>
-                    <li>
-                      <strong>Historia:</strong>{" "}
-                      <span className="text-xs italic">
-                        A fearless warrior with a haunted past.
-                      </span>
-                    </li>
-                  </ul>
+                {/* Fila 1: Extra info + Pasivas */}
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="dark-panel p-4">
+                    <h3 className="stat-text font-semibold mb-4 flex items-center text-lg">
+                      <Info className="w-5 h-5 mr-3 text-accent" /> Extra Info
+                    </h3>
+                    <ul className="text-sm space-y-2 stat-text-muted">
+                      <li>
+                        <strong>Nombre:</strong> {data?.name ?? "—"}
+                      </li>
+                      <li>
+                        <strong>Nivel:</strong> {lvl}
+                      </li>
+                      <li>
+                        <strong>Experiencia:</strong> {exp}
+                      </li>{" "}
+                      {/* único relacionado a XP */}
+                      <li>
+                        <strong>Clase:</strong> {className}
+                      </li>
+                      {clazz?.description && (
+                        <li className="leading-snug">
+                          <strong>Descripción:</strong> {clazz.description}
+                        </li>
+                      )}
+                      {(data as any)?.selectedSubclass?.name && (
+                        <li>
+                          <strong>Subclase:</strong>{" "}
+                          {(data as any).selectedSubclass.name}
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+
+                  <div className="dark-panel p-4">
+                    <h3 className="stat-text font-semibold mb-4 flex items-center text-lg">
+                      <Flame className="w-5 h-5 mr-3 text-accent" /> Passive /
+                      Ultimate Skills
+                    </h3>
+                    <div className="space-y-3 text-sm">
+                      {clazz?.passiveDefault && (
+                        <div className="flex items-start space-x-3">
+                          <Shield className="w-5 h-5 text-gray-300 mt-1" />
+                          <div>
+                            <strong className="text-white">
+                              {clazz.passiveDefault.name}
+                            </strong>
+                            <div className="stat-text-muted">
+                              {clazz.passiveDefault.description}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {unlockedUnique.map((p) => (
+                        <div key={p} className="flex items-start space-x-3">
+                          <Zap className="w-5 h-5 text-accent mt-1" />
+                          <div>
+                            <strong className="text-white">{p}</strong>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                {/* 💥 Habilidades pasivas o ultimates */}
-                <div className="bg-gray-800/60 p-4 rounded-xl">
-                  <h3 className="stat-text font-semibold mb-4 flex items-center text-lg">
-                    <Flame className="w-5 h-5 mr-3 text-red-500" />
-                    Passive / Ultimate Skills
-                  </h3>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex items-start space-x-3">
-                      <Shield className="w-5 h-5 text-gray-300 mt-1" />
-                      <div>
-                        <strong className="text-white">Unbreakable Will</strong>
-                        <br />
-                        <span className="stat-text-muted">
-                          Reduces incoming damage by 10% when below 30% HP.
+                {/* Fila 2: Resistencias | Combat (resto + defensas) */}
+                <div className="grid grid-cols-2 gap-6 auto-rows-fr">
+                  <div className="dark-panel p-4 h-full">
+                    <h3 className="text-white font-semibold mb-4 text-base">
+                      Resistencias
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {ORDERED_RESIST.map((key) => (
+                        <div
+                          key={String(key)}
+                          className="flex justify-between items-center"
+                        >
+                          <span className="text-gray-300 text-sm">
+                            {labelize(String(key))}
+                          </span>
+                          <span className="text-accent font-bold text-sm">
+                            {data?.resistances?.[key] ?? "—"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="dark-panel p-4 h-full">
+                    <h3 className="text-white font-semibold mb-4 text-base">
+                      Combat Stats
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {combatRest.map((key) => (
+                        <div
+                          key={String(key)}
+                          className="flex justify-between items-center"
+                        >
+                          <span className="text-gray-300 text-sm">
+                            {labelize(String(key))}
+                          </span>
+                          <span className="text-accent font-bold text-sm">
+                            {data?.combatStats
+                              ? String(data.combatStats[key])
+                              : "—"}
+                          </span>
+                        </div>
+                      ))}
+
+                      {/* Agregados: Physical/Magical Defense (vienen de stats) */}
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-300 text-sm">
+                          Physical Defense
+                        </span>
+                        <span className="text-accent font-bold text-sm">
+                          {data?.stats?.physicalDefense ?? "—"}
                         </span>
                       </div>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <Zap className="w-5 h-5 text-purple-400 mt-1" />
-                      <div>
-                        <strong className="text-white">Wrath Surge</strong>
-                        <br />
-                        <span className="stat-text-muted">
-                          Ultimate: Boosts damage by 50% for 6 seconds.
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-300 text-sm">
+                          Magical Defense
+                        </span>
+                        <span className="text-accent font-bold text-sm">
+                          {data?.stats?.magicalDefense ?? "—"}
                         </span>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* 🏆 Achievements + 🧪 Potions */}
-              <div className="grid grid-cols-2 gap-6">
-                {/* Achievements */}
-                <div className="bg-gray-800/60 p-4 rounded-xl">
-                  <h3 className="stat-text font-semibold mb-4 flex items-center text-lg">
-                    <Trophy className="w-6 h-6 mr-3 text-yellow-500" />
-                    Achievements
-                  </h3>
-                  <div className="flex space-x-4">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div
-                        key={i}
-                        className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-700 rounded-full flex items-center justify-center"
-                      >
-                        <Star className="w-5 h-5 text-yellow-900" />
-                      </div>
-                    ))}
+                {/* Fila 3: Achievements | Potions (alineados) */}
+                <div className="grid grid-cols-2 gap-6 auto-rows-fr">
+                  <div className="dark-panel p-4 h-full">
+                    <h3 className="stat-text font-semibold mb-4 flex items-center text-base">
+                      <Trophy className="w-5 h-5 mr-3 text-yellow-500" />{" "}
+                      Achievements
+                    </h3>
+                    <div className="flex gap-3">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div
+                          key={i}
+                          className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-500 to-yellow-700 flex items-center justify-center shadow"
+                        >
+                          <Star className="w-5 h-5 text-yellow-900" />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                {/* Potions */}
-                <div className="bg-gray-800/60 p-4 rounded-xl">
-                  <h3 className="stat-text font-semibold mb-4 flex items-center text-lg">
-                    <Flask className="w-6 h-6 mr-3 text-green-500" />
-                    Potions
-                  </h3>
-                  <div className="grid grid-cols-4 gap-3">
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                      <div
-                        key={i}
-                        className="equipment-slot flex items-center justify-center"
-                      >
-                        {i === 1 && (
-                          <div className="w-8 h-8 bg-red-600 rounded-lg"></div>
-                        )}
-                        {i === 2 && (
-                          <Flask className="w-6 h-6 text-green-400" />
-                        )}
-                        {i === 3 && (
-                          <div className="w-8 h-8 bg-blue-600 rounded-lg"></div>
-                        )}
-                        {i === 5 && (
-                          <div className="w-8 h-8 bg-purple-600 rounded-lg"></div>
-                        )}
-                      </div>
-                    ))}
+                  <div className="dark-panel p-4 h-full">
+                    <h3 className="stat-text font-semibold mb-4 flex items-center text-base">
+                      <Flask className="w-5 h-5 mr-3 text-green-500" /> Potions
+                    </h3>
+
+                    {/* 5 slots: solo 1 poción ficticia */}
+                    <div className="grid grid-cols-5 gap-2">
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <div
+                          key={i}
+                          className="aspect-square equipment-slot flex items-center justify-center"
+                          title={i === 0 ? "Small Healing Potion" : "Empty"}
+                        >
+                          {i === 0 ? (
+                            <div className="w-6 h-6 rounded-md bg-red-600" />
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Panel derecho: equipamiento y stats */}
+            {/* Panel derecho: equipo + avatar + 2 columnas (5 y 5) + inventario */}
             <div className="dark-panel p-6 max-w-4x2 mx-auto">
-              {/* Character Equipment Grid */}
+              {/* Equipo */}
               <div className="flex justify-center mb-8">
                 <div className="relative">
-                  {/* Equipment Grid Layout */}
                   <div className="grid grid-cols-3 gap-4 items-center">
-                    {/* Left Column - Equipment */}
+                    {/* Izquierda */}
                     <div className="flex flex-col gap-3 items-center justify-center">
-                      <EquipmentSlot
-                        type="Head"
+                      <EquipmentSlotView
+                        slot="helmet"
                         icon={CircleDot}
-                        item={character.equipment.head}
+                        itemId={data?.equipment.helmet ?? null}
                       />
-                      <EquipmentSlot
-                        type="Chest"
+                      <EquipmentSlotView
+                        slot="chest"
                         icon={Shirt}
-                        item={character.equipment.chest}
+                        itemId={data?.equipment.chest ?? null}
                       />
-                      <EquipmentSlot
-                        type="Gloves"
+                      <EquipmentSlotView
+                        slot="gloves"
                         icon={Hand}
-                        item={character.equipment.gloves}
+                        itemId={data?.equipment.gloves ?? null}
                       />
-                      <EquipmentSlot
-                        type="Boots"
+                      <EquipmentSlotView
+                        slot="boots"
                         icon={Boots}
-                        item={character.equipment.boots}
+                        itemId={data?.equipment.boots ?? null}
                       />
                     </div>
 
-                    {/* Center Column - Avatar */}
+                    {/* Centro: avatar */}
                     <div className="flex flex-col items-center justify-center">
-                      {/* Character name pegado arriba del avatar */}
-                      <div className="w-48 text-center text-lg text-blue-300 font-bold  px-3 py-1 bg-black/40 rounded-t-lg border-t border-l border-r border-gray-600">
-                        {character.name}
+                      <div className="w-48 text-center text-lg text-accent font-bold px-3 py-1 bg-[var(--panel-2)] border border-[var(--border)]">
+                        {data?.name ?? "—"}
                       </div>
-
-                      <div className="w-48 h-56 bg-gradient-to-b from-zinc-800 to-zinc-900  shadow-inner flex items-center justify-center border-l border-r border-gray-600">
+                      <div className="w-48 h-56 bg-[var(--panel-2)] shadow-inner flex items-center justify-center border-x border-[var(--border)]">
                         <User className="w-24 h-24 text-gray-300" />
                       </div>
-
-                      {/* Level como barra de progreso pegada al avatar */}
-                      <div className="w-48 h-8 bg-gray-800 rounded-b-lg border-b border-l border-r border-gray-600 relative overflow-hidden">
-                        {/* Barra de progreso */}
-                        <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-500 w-[75%] "></div>
-                        {/* Label del level centrado */}
-                        <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm z-10 ">
-                          Level {character.level}
-                        </div>
+                      <div className="w-48 h-8 bg-[var(--panel-2)] rounded-b-lg border border-[var(--border)] relative overflow-hidden badge-level flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">
+                          Level {lvl}
+                        </span>
                       </div>
-                      {/* Weapons below avatar */}
                       <div className="flex gap-4 mt-5.5 justify-center">
-                        <EquipmentSlot
-                          type="Main Weapon"
+                        <EquipmentSlotView
+                          slot="mainWeapon"
                           icon={Sword}
-                          item={character.equipment.mainWeapon}
+                          itemId={data?.equipment.mainWeapon ?? null}
                         />
-                        <EquipmentSlot
-                          type="Off-hand"
+                        <EquipmentSlotView
+                          slot="offWeapon"
                           icon={Shield}
-                          item={character.equipment.offHandWeapon}
+                          itemId={data?.equipment.offWeapon ?? null}
                         />
                       </div>
                     </div>
 
-                    {/* Right Column - Accessories */}
+                    {/* Derecha accesorios */}
                     <div className="flex flex-col gap-3 items-center justify-center">
-                      <EquipmentSlot
-                        type="Amulet"
+                      <EquipmentSlotView
+                        slot="amulet"
                         icon={Necklace}
-                        item={character.equipment.amulet}
+                        itemId={data?.equipment.amulet ?? null}
                       />
-                      <EquipmentSlot
-                        type="Belt"
+                      <EquipmentSlotView
+                        slot="belt"
                         icon={Belt}
-                        item={character.equipment.belt}
+                        itemId={data?.equipment.belt ?? null}
                       />
-                      <EquipmentSlot
-                        type="Ring"
+                      <EquipmentSlotView
+                        slot="ring"
                         icon={Ring}
-                        item={character.equipment.ring}
+                        itemId={data?.equipment.ring ?? null}
                       />
-                      {/* Empty slot for symmetry */}
-                      <div className="w-20 h-20"></div>
+                      <div className="w-20 h-20" />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Stats Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                {/* Character Stats */}
-                <div className="bg-gray-800/60 p-4 rounded-xl">
-                  <h3 className="text-white font-semibold mb-4 flex items-center text-base">
-                    <Zap className="w-5 h-5 mr-3 text-purple-400" />
-                    Character Stats
-                  </h3>
-                  <div className="space-y-3">
-                    {Object.entries(character.stats).map(([stat, value]) => (
-                      <div
-                        key={stat}
-                        className="flex justify-between items-center"
-                      >
-                        <span className="text-gray-300 capitalize text-sm">
-                          {stat}
-                        </span>
-                        <div className="flex items-center space-x-3">
-                          <span className="text-white font-bold">{value}</span>
-                          <Plus className="w-4 h-4 text-green-500 cursor-pointer hover:text-green-400 transition-colors" />
+              {/* Dos columnas: Character Stats (5) | Combat Stats (5) */}
+              {data && (
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="card-muted p-4">
+                    <h3 className="text-white font-semibold mb-4 flex items-center text-base">
+                      <Zap className="w-5 h-5 mr-3 text-accent" /> Character
+                      Stats
+                    </h3>
+                    <div className="space-y-3">
+                      {STATS_LEFT_5.map((key) => (
+                        <div
+                          key={String(key)}
+                          className="flex justify-between items-center"
+                        >
+                          <span className="text-gray-300 text-sm">
+                            {labelize(String(key))}
+                          </span>
+                          <div className="flex items-center space-x-3">
+                            <span className="text-white font-bold">
+                              {data.stats[key]}
+                            </span>
+                            <Plus className="w-4 h-4 text-green-500 cursor-pointer hover:text-green-400 transition-colors" />
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="card-muted p-4">
+                    <h3 className="text-white font-semibold mb-4 text-base">
+                      Combat Stats
+                    </h3>
+                    <div className="space-y-3">
+                      {RIGHT_FEATURED.map(({ key, label }) => (
+                        <div
+                          key={String(key)}
+                          className="flex justify-between items-center"
+                        >
+                          <span className="text-gray-300 text-sm">
+                            {label ?? labelize(String(key))}
+                          </span>
+                          <span className="text-accent font-bold text-sm">
+                            {data?.combatStats
+                              ? String(data.combatStats[key])
+                              : "—"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
+              )}
 
-                {/* Combat Stats */}
-                <div className="bg-gray-800/60 p-4 rounded-xl">
-                  <h3 className="text-white font-semibold mb-4 text-base">
-                    Combat Stats
-                  </h3>
-                  <div className="space-y-3">
-                    {Object.entries(character.combat).map(([label, value]) => (
-                      <div
-                        key={label}
-                        className="flex justify-between items-center"
-                      >
-                        <span className="text-gray-300 capitalize text-sm">
-                          {label}
-                        </span>
-                        <span className="text-purple-400 font-bold text-sm">
-                          {value}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Inventory Section */}
-              <div className="border-t border-gray-600 pt-6">
-                <div className="flex items-center justify-between mb-4">
+              {/* Inventario (placeholder) */}
+              <div className="border-t border-[var(--border)] pt-6">
+                <div className="flex items-centered justify-between mb-4">
                   <h3 className="text-white font-semibold flex items-center">
-                    <Package className="w-5 h-5 mr-2 text-gray-400" />
+                    <Backpack className="w-5 h-5 mr-2 text-gray-400" />{" "}
                     Inventory
                   </h3>
                   <div className="text-xs text-gray-400">
-                    <span className="text-purple-400">6</span>/10
+                    <span className="text-accent">—</span>/—
                   </div>
                 </div>
 
@@ -506,29 +642,12 @@ export default function GameInterfaceCopy() {
                   {Array.from({ length: 10 }, (_, i) => (
                     <div
                       key={i}
-                      className="aspect-square bg-gray-800/80 border border-gray-600 rounded-lg flex items-center justify-center hover:border-purple-400 transition-colors cursor-pointer"
+                      className="aspect-square equipment-slot flex items-center justify-center hover:border-[var(--accent-weak)] transition-colors cursor-pointer"
                     >
                       {i === 0 && <Sword className="w-6 h-6 text-gray-400" />}
                       {i === 1 && <Shield className="w-6 h-6 text-gray-400" />}
-                      {i === 2 && (
-                        <div className="w-8 h-8 bg-purple-600 rounded-lg"></div>
-                      )}
-                      {i === 3 && <Gem className="w-6 h-6 text-purple-400" />}
-                      {i === 4 && (
-                        <div className="w-8 h-8 bg-green-600 rounded-lg"></div>
-                      )}
-                      {i === 5 && <Crown className="w-6 h-6 text-yellow-500" />}
                     </div>
                   ))}
-                </div>
-
-                <div className="flex justify-between items-center pt-3 border-t border-gray-600">
-                  <div className="text-xs text-gray-400">
-                    Weight: <span className="text-purple-400">45.2</span>/100
-                  </div>
-                  <button className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
-                    Auto Sort
-                  </button>
                 </div>
               </div>
             </div>
