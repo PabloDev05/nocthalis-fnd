@@ -415,7 +415,7 @@ export default function GameInterface() {
                 <div className="grid grid-cols-2 gap-6 auto-rows-fr">
                   <div className="dark-panel p-4 h-full">
                     <h3 className="text-white font-semibold mb-4 text-base">
-                      Resistencias
+                      Resistances
                     </h3>
                     <div className="grid grid-cols-2 gap-3">
                       {ORDERED_RESIST.map((key) => (
