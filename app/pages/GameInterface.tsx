@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import {
   Sword,
@@ -27,7 +28,6 @@ import type { CharacterApi, EquipmentSlot } from "../../types/character";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3030/api";
 
-// Orden visible de Character Stats (izquierda de las 5 filas)
 const STATS_LEFT_5: (keyof CharacterApi["stats"])[] = [
   "strength",
   "agility",
@@ -36,7 +36,6 @@ const STATS_LEFT_5: (keyof CharacterApi["stats"])[] = [
   "luck",
 ];
 
-// Resistencias (sin critical reductions)
 const ORDERED_RESIST: (keyof CharacterApi["resistances"])[] = [
   "fire",
   "ice",
@@ -54,7 +53,6 @@ const ORDERED_RESIST: (keyof CharacterApi["resistances"])[] = [
   "knockback",
 ];
 
-// Orden completo de combat para calcular qué queda en el bloque de la izquierda
 const ORDERED_COMBAT: (keyof NonNullable<CharacterApi["combatStats"]>)[] = [
   "maxHP",
   "maxMP",
@@ -72,7 +70,14 @@ const ORDERED_COMBAT: (keyof NonNullable<CharacterApi["combatStats"]>)[] = [
   "movementSpeed",
 ];
 
-// /character/progression
+const NAV_ITEMS = [
+  { label: "Terms of Use", href: "/legal/terms" },
+  { label: "Privacy", href: "/legal/privacy" },
+  { label: "Legal notice", href: "/legal/notice" },
+  { label: "Forum", href: "/forum" },
+  { label: "Support", href: "/support" },
+];
+
 type ProgressionApi = {
   level: number;
   experience: number;
@@ -101,7 +106,6 @@ const EquipmentSlotView = ({
   </div>
 );
 
-// Elegimos Attack/Magic como “principal” y escondemos el otro
 function pickPrimaryPower(data?: CharacterApi | null): {
   key: "attackPower" | "magicPower";
   label: string;
@@ -125,13 +129,20 @@ function pickPrimaryPower(data?: CharacterApi | null): {
 }
 
 export default function GameInterface() {
-  const { token } = useAuth();
+  const navigate = useNavigate();
+  const { token, user: userFromCtx, logout } = useAuth();
 
   const [activeMenu, setActiveMenu] = useState("character");
   const [data, setData] = useState<CharacterApi | null>(null);
   const [progression, setProgression] = useState<ProgressionApi | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const handleLogout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   const client = useMemo(() => {
     const instance = axios.create({
@@ -163,16 +174,11 @@ export default function GameInterface() {
     ])
       .then(([meRes, progRes]) => {
         if (!mounted) return;
-        console.log("GET /character/me status:", meRes.status);
-        console.log("GET /character/me data:", meRes.data);
-        if (progRes?.data)
-          console.log("GET /character/progression data:", progRes.data);
         setData(meRes.data);
         setProgression(progRes?.data ?? null);
       })
       .catch((err) => {
         if (!mounted) return;
-        console.error("Character load error:", err?.response ?? err);
         setError(
           err?.response?.data?.message ||
             err.message ||
@@ -191,11 +197,10 @@ export default function GameInterface() {
 
   const menuItems = [
     { id: "character", label: "CHARACTER", icon: User, disabled: false },
+    { id: "arena", label: "ARENA", icon: Swords, disabled: false },
     { id: "options", label: "OPTIONS", icon: Settings, disabled: true },
-    { id: "arena", label: "ARENA", icon: Swords, disabled: true },
   ] as const;
 
-  // Extra Info
   const lvl = progression?.level ?? data?.level ?? "—";
   const exp = progression?.experience ?? data?.experience ?? 0;
   const clazz = (data as any)?.class as
@@ -207,27 +212,31 @@ export default function GameInterface() {
     | undefined;
   const className = clazz?.name ?? data?.className ?? "—";
 
-  // Combat destacados (derecha), en el orden pedido
+  // Nombre mostrado (backend → contexto → character.name → "—")
+  const ctxName =
+    typeof userFromCtx === "string"
+      ? userFromCtx
+      : ((userFromCtx as any)?.username ?? null);
+  const displayName = (data as any)?.username ?? ctxName ?? data?.name ?? "—";
+
   const p = pickPrimaryPower(data);
   const RIGHT_FEATURED: Array<{
     key: keyof NonNullable<CharacterApi["combatStats"]>;
     label?: string;
   }> = [
-    { key: p.key, label: p.label }, // Strength ↔ Attack/Magic
-    { key: "evasion" }, // Agility ↔ Evasion
-    { key: "blockChance" }, // Vitality ↔ Block Chance
-    { key: "damageReduction" }, // Endurance ↔ Damage Reduction
-    { key: "criticalChance" }, // Luck ↔ Critical Chance
+    { key: p.key, label: p.label },
+    { key: "evasion" },
+    { key: "blockChance" },
+    { key: "damageReduction" },
+    { key: "criticalChance" },
   ];
 
-  // Combat “resto” (izquierda): quitamos los 5 de la derecha y también el poder contrario (para no repetir)
   const combatRest = ORDERED_COMBAT.filter(
     (k) =>
       !RIGHT_FEATURED.some((r) => r.key === k) &&
       k !== (p.isMage ? "attackPower" : "magicPower")
   );
 
-  // Pasivas desbloqueadas sin duplicar la default
   const unlockedUnique = (() => {
     const base = data?.passivesUnlocked ?? [];
     const exclude = clazz?.passiveDefault?.name?.toLowerCase();
@@ -240,35 +249,53 @@ export default function GameInterface() {
     return Array.from(set);
   })();
 
+  // ====== PROGRESO DE XP para el badge ======
+  const xpTotal = progression?.nextLevelAt ?? 0;
+  const xpRemaining = progression?.xpToNext ?? xpTotal;
+  const xpEarned = Math.max(0, xpTotal - xpRemaining);
+  const xpPct = xpTotal > 0 ? Math.min(1, xpEarned / xpTotal) : 0;
+  const pct100 = Math.round(xpPct * 100);
+
+  // Color sutil por tramo
+  let xpColor = "bg-[var(--accent-weak)]";
+  if (xpPct >= 0.66)
+    xpColor = "bg-[var(--accent)] shadow-[0_0_6px_var(--accent)]";
+  else if (xpPct >= 0.33) xpColor = "bg-[var(--accent)]/80";
+
   return (
     <div className="min-h-screen text-sm leading-tight space-y-2 bg-[var(--bg)] relative">
-      {/* Navbar original */}
+      {/* Navbar */}
       <header className="relative z-10 dark-panel m-4 p-4 flex justify-between items-center">
         <div className="flex items-center space-x-8">
           <h1 className="text-3xl font-bold stat-text tracking-wide font-serif">
             Nocthalis
           </h1>
         </div>
-        <nav className="flex space-x-6 text-sm">
-          {[
-            "Terms of Use",
-            "Privacy",
-            "Legal notice",
-            "Forum",
-            "Support",
-            "Logout",
-          ].map((item) => (
+
+        <nav className="flex items-center space-x-6 text-sm">
+          {NAV_ITEMS.map((item) => (
             <a
-              key={item}
-              href="#"
+              target="_blank"
+              rel="noreferrer"
+              key={item.label}
+              href={item.href}
               className="stat-text-muted hover:text-gray-300 transition-colors"
             >
-              {item}
+              {item.label}
             </a>
           ))}
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="stat-text-muted hover:text-gray-300 transition-colors cursor-pointer
+             focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-weak)] rounded-sm"
+            title="Cerrar sesión"
+          >
+            Logout
+          </button>
         </nav>
       </header>
-
       <div className="relative z-10 flex h-[calc(100vh-40px)]">
         {/* Menú lateral */}
         <aside className="w-59 h-215 p-2 space-y-1 ml-1 rounded-lg shadow-lg border border-[var(--border)] bg-[var(--panel-2)]">
@@ -306,7 +333,7 @@ export default function GameInterface() {
         {/* Contenido principal */}
         <main className="flex-1 space-y-4">
           <div className="grid grid-cols-3 gap-1 h-[calc(100%-40px)]">
-            {/* CONTENEDOR IZQUIERDO “lindo” */}
+            {/* CONTENEDOR IZQUIERDO */}
             <div className="col-span-2 ml-1">
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel-2)] p-4 space-y-6 shadow-lg">
                 {loading && (
@@ -324,19 +351,18 @@ export default function GameInterface() {
                 <div className="grid grid-cols-2 gap-6">
                   <div className="dark-panel p-4">
                     <h3 className="stat-text font-semibold mb-4 flex items-center text-lg">
-                      <Info className="w-5 h-5 mr-3 text-accent" /> Extra Info
+                      <Info className="w-5 h-5 mr-3 text-accent" /> Profile
                     </h3>
                     <ul className="text-sm space-y-2 stat-text-muted">
                       <li>
-                        <strong>Nombre:</strong> {data?.name ?? "—"}
+                        <strong>Nombre:</strong> {displayName}
                       </li>
                       <li>
                         <strong>Nivel:</strong> {lvl}
                       </li>
                       <li>
                         <strong>Experiencia:</strong> {exp}
-                      </li>{" "}
-                      {/* único relacionado a XP */}
+                      </li>
                       <li>
                         <strong>Clase:</strong> {className}
                       </li>
@@ -385,7 +411,7 @@ export default function GameInterface() {
                   </div>
                 </div>
 
-                {/* Fila 2: Resistencias | Combat (resto + defensas) */}
+                {/* Fila 2: Resistencias | Combat */}
                 <div className="grid grid-cols-2 gap-6 auto-rows-fr">
                   <div className="dark-panel p-4 h-full">
                     <h3 className="text-white font-semibold mb-4 text-base">
@@ -410,7 +436,7 @@ export default function GameInterface() {
 
                   <div className="dark-panel p-4 h-full">
                     <h3 className="text-white font-semibold mb-4 text-base">
-                      Combat Stats
+                      Combat Metrics
                     </h3>
                     <div className="grid grid-cols-2 gap-3">
                       {combatRest.map((key) => (
@@ -428,8 +454,6 @@ export default function GameInterface() {
                           </span>
                         </div>
                       ))}
-
-                      {/* Agregados: Physical/Magical Defense (vienen de stats) */}
                       <div className="flex justify-between items-center">
                         <span className="text-gray-300 text-sm">
                           Physical Defense
@@ -450,20 +474,24 @@ export default function GameInterface() {
                   </div>
                 </div>
 
-                {/* Fila 3: Achievements | Potions (alineados) */}
+                {/* Fila 3: Achievements | Potions */}
                 <div className="grid grid-cols-2 gap-6 auto-rows-fr">
                   <div className="dark-panel p-4 h-full">
                     <h3 className="stat-text font-semibold mb-4 flex items-center text-base">
-                      <Trophy className="w-5 h-5 mr-3 text-yellow-500" />{" "}
+                      <Trophy className="w-5 h-5 mr-3 text-[var(--accent)]" />{" "}
                       Achievements
                     </h3>
                     <div className="flex gap-3">
                       {[1, 2, 3, 4, 5].map((i) => (
                         <div
                           key={i}
-                          className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-500 to-yellow-700 flex items-center justify-center shadow"
+                          className="w-10 h-10 rounded-full border border-[var(--border)]
+                 bg-gradient-to-br from-[var(--accent-weak)] to-[var(--accent)]
+                 shadow-[inset_0_0_0_1px_rgba(255,255,255,.04),0_2px_10px_rgba(0,0,0,.35)]
+                 flex items-center justify-center hover:shadow-[0_0_0_2px_var(--accent-weak)] transition-shadow"
+                          title="Achievement"
                         >
-                          <Star className="w-5 h-5 text-yellow-900" />
+                          <Star className="w-5 h-5 text-[var(--text)]/80" />
                         </div>
                       ))}
                     </div>
@@ -473,8 +501,6 @@ export default function GameInterface() {
                     <h3 className="stat-text font-semibold mb-4 flex items-center text-base">
                       <Flask className="w-5 h-5 mr-3 text-green-500" /> Potions
                     </h3>
-
-                    {/* 5 slots: solo 1 poción ficticia */}
                     <div className="grid grid-cols-5 gap-2">
                       {Array.from({ length: 5 }, (_, i) => (
                         <div
@@ -483,7 +509,7 @@ export default function GameInterface() {
                           title={i === 0 ? "Small Healing Potion" : "Empty"}
                         >
                           {i === 0 ? (
-                            <div className="w-6 h-6 rounded-md bg-red-600" />
+                            <div className="w-6 h-6 rounded-md bg-dark-600" />
                           ) : null}
                         </div>
                       ))}
@@ -493,9 +519,8 @@ export default function GameInterface() {
               </div>
             </div>
 
-            {/* Panel derecho: equipo + avatar + 2 columnas (5 y 5) + inventario */}
+            {/* Panel derecho: equipo + avatar */}
             <div className="dark-panel p-6 max-w-4x2 mx-auto">
-              {/* Equipo */}
               <div className="flex justify-center mb-8">
                 <div className="relative">
                   <div className="grid grid-cols-3 gap-4 items-center">
@@ -523,19 +548,35 @@ export default function GameInterface() {
                       />
                     </div>
 
-                    {/* Centro: avatar */}
+                    {/* Centro: avatar + badge con progreso integrado */}
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-48 text-center text-lg text-accent font-bold px-3 py-1 bg-[var(--panel-2)] border border-[var(--border)]">
-                        {data?.name ?? "—"}
+                        {displayName}
                       </div>
+
                       <div className="w-48 h-56 bg-[var(--panel-2)] shadow-inner flex items-center justify-center border-x border-[var(--border)]">
                         <User className="w-24 h-24 text-gray-300" />
                       </div>
-                      <div className="w-48 h-8 bg-[var(--panel-2)] rounded-b-lg border border-[var(--border)] relative overflow-hidden badge-level flex items-center justify-center">
-                        <span className="text-white font-bold text-sm">
-                          Level {lvl}
-                        </span>
+
+                      {/* Badge de nivel con barra de progreso detrás */}
+                      <div className="w-48 h-8 rounded-b-lg border border-[var(--border)] relative overflow-hidden bg-[var(--panel-2)]">
+                        {/* fill de XP */}
+                        <div
+                          className={`absolute inset-y-0 left-0 ${xpColor} transition-all`}
+                          style={{ width: `${pct100}%` }}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={pct100}
+                          role="progressbar"
+                        />
+                        {/* texto por encima */}
+                        <div className="relative z-10 w-full h-full flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">
+                            Level {lvl}
+                          </span>
+                        </div>
                       </div>
+
                       <div className="flex gap-4 mt-5.5 justify-center">
                         <EquipmentSlotView
                           slot="mainWeapon"
