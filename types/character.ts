@@ -61,6 +61,9 @@ export interface CharacterApi {
   level: number;
   experience: number;
 
+  /** ⬇️ agrega este campo (lo manda tu backend cuando subes de nivel) */
+  availablePoints?: number;
+
   stats: Stats;
   resistances: Resistances;
   combatStats: CombatStats;
@@ -69,5 +72,5 @@ export interface CharacterApi {
   inventory: string[]; // ids de items
   equipment: Equipment;
 
-  className?: string; // si tu controller la incluye (opcional)
+  className?: string; // opcional si lo envías
 }

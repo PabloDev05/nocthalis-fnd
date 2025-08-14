@@ -12,7 +12,7 @@ export default [
   route("/select-class", "./pages/protected/ClassSelectionRoute.tsx"),
 
   // protegidas
-  route("/dashboard", "./pages/protected/ProtectedDashboard.tsx"),
+  route("/arena", "./pages/protected/ProtectedArena.tsx"),
   route("/game", "./pages/protected/ProtectedGameInterface.tsx"),
 
   // utilidades / pruebas

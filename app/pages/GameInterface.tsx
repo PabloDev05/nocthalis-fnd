@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import {
   Sword,
@@ -81,8 +81,12 @@ const NAV_ITEMS = [
 type ProgressionApi = {
   level: number;
   experience: number;
+  currentLevelAt: number;
   nextLevelAt: number;
+  xpSinceLevel: number;
+  xpForThisLevel: number;
   xpToNext: number;
+  xpPercent?: number;
 };
 
 function labelize(key: string) {
@@ -122,27 +126,20 @@ function pickPrimaryPower(data?: CharacterApi | null): {
       isMage,
     };
   const { attackPower = 0, magicPower = 0 } = data.combatStats;
-  if (isMage || magicPower > attackPower) {
+  if (isMage || magicPower > attackPower)
     return { key: "magicPower", label: "Magic Power", isMage: true };
-  }
   return { key: "attackPower", label: "Attack Power", isMage: false };
 }
 
 export default function GameInterface() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { token, user: userFromCtx, logout } = useAuth();
 
-  const [activeMenu, setActiveMenu] = useState("character");
   const [data, setData] = useState<CharacterApi | null>(null);
   const [progression, setProgression] = useState<ProgressionApi | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const handleLogout = (e: React.MouseEvent) => {
-    e.preventDefault();
-    logout();
-    navigate("/login", { replace: true });
-  };
 
   const client = useMemo(() => {
     const instance = axios.create({
@@ -174,6 +171,8 @@ export default function GameInterface() {
     ])
       .then(([meRes, progRes]) => {
         if (!mounted) return;
+        console.log("GET /character/me response:", meRes);
+        console.log("GET /character/progression response:", progRes);
         setData(meRes.data);
         setProgression(progRes?.data ?? null);
       })
@@ -185,24 +184,33 @@ export default function GameInterface() {
             "Error fetching character"
         );
       })
-      .finally(() => {
-        if (!mounted) return;
-        setLoading(false);
-      });
+      .finally(() => mounted && setLoading(false));
 
     return () => {
       mounted = false;
     };
   }, [client]);
 
-  const menuItems = [
-    { id: "character", label: "CHARACTER", icon: User, disabled: false },
-    { id: "arena", label: "ARENA", icon: Swords, disabled: false },
-    { id: "options", label: "OPTIONS", icon: Settings, disabled: true },
-  ] as const;
+  const handleLogout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    logout();
+    navigate("/login", { replace: true });
+  };
+
+  // dinámico por URL
+  const isCharacter = location.pathname.startsWith("/game");
+  const isArena = location.pathname.startsWith("/arena");
 
   const lvl = progression?.level ?? data?.level ?? "—";
-  const exp = progression?.experience ?? data?.experience ?? 0;
+  const expNow = progression?.experience ?? data?.experience ?? 0;
+  const startLvl = progression?.currentLevelAt ?? 0;
+  const nextAt = progression?.nextLevelAt ?? 0;
+  const xpSince = progression?.xpSinceLevel ?? Math.max(0, expNow - startLvl);
+  const xpForLevel =
+    progression?.xpForThisLevel ?? Math.max(1, nextAt - startLvl);
+  const xpPct = progression?.xpPercent ?? Math.min(1, xpSince / xpForLevel);
+  const pct100 = Math.round(xpPct * 100);
+
   const clazz = (data as any)?.class as
     | {
         name?: string;
@@ -212,7 +220,6 @@ export default function GameInterface() {
     | undefined;
   const className = clazz?.name ?? data?.className ?? "—";
 
-  // Nombre mostrado (backend → contexto → character.name → "—")
   const ctxName =
     typeof userFromCtx === "string"
       ? userFromCtx
@@ -249,18 +256,9 @@ export default function GameInterface() {
     return Array.from(set);
   })();
 
-  // ====== PROGRESO DE XP para el badge ======
-  const xpTotal = progression?.nextLevelAt ?? 0;
-  const xpRemaining = progression?.xpToNext ?? xpTotal;
-  const xpEarned = Math.max(0, xpTotal - xpRemaining);
-  const xpPct = xpTotal > 0 ? Math.min(1, xpEarned / xpTotal) : 0;
-  const pct100 = Math.round(xpPct * 100);
-
-  // Color sutil por tramo
-  let xpColor = "bg-[var(--accent-weak)]";
-  if (xpPct >= 0.66)
-    xpColor = "bg-[var(--accent)] shadow-[0_0_6px_var(--accent)]";
-  else if (xpPct >= 0.33) xpColor = "bg-[var(--accent)]/80";
+  const fillClass =
+    "absolute inset-y-0 left-0 rounded-b-[10px] bg-gradient-to-r from-[var(--accent-weak)] via-[var(--accent)] to-[var(--accent)]/90 " +
+    "shadow-[0_0_10px_rgba(120,120,255,.25),inset_0_0_6px_rgba(0,0,0,.5)] transition-[width] duration-700 ease-out";
 
   return (
     <div className="min-h-screen text-sm leading-tight space-y-2 bg-[var(--bg)] relative">
@@ -275,11 +273,11 @@ export default function GameInterface() {
         <nav className="flex items-center space-x-6 text-sm">
           {NAV_ITEMS.map((item) => (
             <a
+              key={item.label}
               target="_blank"
               rel="noreferrer"
-              key={item.label}
               href={item.href}
-              className="stat-text-muted hover:text-gray-300 transition-colors"
+              className="stat-text-muted hover:text-gray-300"
             >
               {item.label}
             </a>
@@ -288,28 +286,53 @@ export default function GameInterface() {
           <button
             type="button"
             onClick={handleLogout}
-            className="stat-text-muted hover:text-gray-300 transition-colors cursor-pointer
-             focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-weak)] rounded-sm"
+            className="stat-text-muted hover:text-gray-300 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-weak)] rounded-sm"
             title="Cerrar sesión"
           >
             Logout
           </button>
         </nav>
       </header>
+
       <div className="relative z-10 flex h-[calc(100vh-40px)]">
-        {/* Menú lateral */}
+        {/* Menú lateral dinámico */}
         <aside className="w-59 h-215 p-2 space-y-1 ml-1 rounded-lg shadow-lg border border-[var(--border)] bg-[var(--panel-2)]">
-          {menuItems.map((item) => {
+          {[
+            {
+              id: "character",
+              label: "CHARACTER",
+              icon: User,
+              href: "/game",
+              disabled: false,
+            },
+            {
+              id: "arena",
+              label: "ARENA",
+              icon: Swords,
+              href: "/arena",
+              disabled: false,
+            },
+            {
+              id: "options",
+              label: "OPTIONS",
+              icon: Settings,
+              href: "/options",
+              disabled: true,
+            },
+          ].map((item) => {
             const Icon = item.icon as any;
-            const isActive = activeMenu === item.id;
-            const common =
-              "w-full gothic-button flex items-center space-x-4 text-left";
+            const active =
+              (item.id === "character" && isCharacter) ||
+              (item.id === "arena" && isArena) ||
+              (item.id === "options" &&
+                location.pathname.startsWith("/options"));
+            const cls = `w-full gothic-button flex items-center space-x-4 text-left ${active ? "active" : ""}`;
             if (item.disabled) {
               return (
                 <div
                   key={item.id}
                   aria-disabled
-                  className={`${common} opacity-50 cursor-not-allowed`}
+                  className={`${cls} opacity-50 cursor-not-allowed`}
                   title={`${item.label} (próximamente)`}
                 >
                   <Icon className="w-5 h-5" />
@@ -320,8 +343,8 @@ export default function GameInterface() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveMenu(item.id)}
-                className={`${common} ${isActive ? "active" : ""}`}
+                onClick={() => navigate(item.href)}
+                className={cls}
               >
                 <Icon className="w-5 h-5" />
                 <span className="text-sm font-medium">{item.label}</span>
@@ -333,7 +356,7 @@ export default function GameInterface() {
         {/* Contenido principal */}
         <main className="flex-1 space-y-4">
           <div className="grid grid-cols-3 gap-1 h-[calc(100%-40px)]">
-            {/* CONTENEDOR IZQUIERDO */}
+            {/* Columna izquierda (igual que antes) */}
             <div className="col-span-2 ml-1">
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel-2)] p-4 space-y-6 shadow-lg">
                 {loading && (
@@ -347,7 +370,7 @@ export default function GameInterface() {
                   </div>
                 )}
 
-                {/* Fila 1: Extra info + Pasivas */}
+                {/* Profile + Passive */}
                 <div className="grid grid-cols-2 gap-6">
                   <div className="dark-panel p-4">
                     <h3 className="stat-text font-semibold mb-4 flex items-center text-lg">
@@ -355,35 +378,27 @@ export default function GameInterface() {
                     </h3>
                     <ul className="text-sm space-y-2 stat-text-muted">
                       <li>
-                        <strong>Nombre:</strong> {displayName}
+                        <strong>Name:</strong> {displayName}
                       </li>
                       <li>
-                        <strong>Nivel:</strong> {lvl}
+                        <strong>Lv:</strong> {lvl}
+                      </li>
+                      <li
+                        title={`En este nivel: ${xpSince}/${xpForLevel} • Falta: ${Math.max(0, xpForLevel - xpSince)}`}
+                      >
+                        <strong>Exp:</strong> {xpSince}/
+                        {Math.max(0, xpForLevel - xpSince)} ({pct100}%)
                       </li>
                       <li>
-                        <strong>Experiencia:</strong> {exp}
+                        <strong>Class:</strong> {className}
                       </li>
-                      <li>
-                        <strong>Clase:</strong> {className}
-                      </li>
-                      {clazz?.description && (
-                        <li className="leading-snug">
-                          <strong>Descripción:</strong> {clazz.description}
-                        </li>
-                      )}
-                      {(data as any)?.selectedSubclass?.name && (
-                        <li>
-                          <strong>Subclase:</strong>{" "}
-                          {(data as any).selectedSubclass.name}
-                        </li>
-                      )}
                     </ul>
                   </div>
 
                   <div className="dark-panel p-4">
                     <h3 className="stat-text font-semibold mb-4 flex items-center text-lg">
-                      <Flame className="w-5 h-5 mr-3 text-accent" /> Passive /
-                      Ultimate Skills
+                      <Flame className="w-5 h-5 mr-3 text-accent" /> Core
+                      Passive
                     </h3>
                     <div className="space-y-3 text-sm">
                       {clazz?.passiveDefault && (
@@ -411,7 +426,7 @@ export default function GameInterface() {
                   </div>
                 </div>
 
-                {/* Fila 2: Resistencias | Combat */}
+                {/* Resistencias y Combat */}
                 <div className="grid grid-cols-2 gap-6 auto-rows-fr">
                   <div className="dark-panel p-4 h-full">
                     <h3 className="text-white font-semibold mb-4 text-base">
@@ -474,7 +489,7 @@ export default function GameInterface() {
                   </div>
                 </div>
 
-                {/* Fila 3: Achievements | Potions */}
+                {/* Achievements / Potions */}
                 <div className="grid grid-cols-2 gap-6 auto-rows-fr">
                   <div className="dark-panel p-4 h-full">
                     <h3 className="stat-text font-semibold mb-4 flex items-center text-base">
@@ -485,10 +500,8 @@ export default function GameInterface() {
                       {[1, 2, 3, 4, 5].map((i) => (
                         <div
                           key={i}
-                          className="w-10 h-10 rounded-full border border-[var(--border)]
-                 bg-gradient-to-br from-[var(--accent-weak)] to-[var(--accent)]
-                 shadow-[inset_0_0_0_1px_rgba(255,255,255,.04),0_2px_10px_rgba(0,0,0,.35)]
-                 flex items-center justify-center hover:shadow-[0_0_0_2px_var(--accent-weak)] transition-shadow"
+                          className="w-10 h-10 rounded-full border border-[var(--border)] bg-gradient-to-br from-[var(--accent-weak)] to-[var(--accent)]
+                          shadow-[inset_0_0_0_1px_rgba(255,255,255,.04),0_2px_10px_rgba(0,0,0,.35)] flex items-center justify-center"
                           title="Achievement"
                         >
                           <Star className="w-5 h-5 text-[var(--text)]/80" />
@@ -506,12 +519,7 @@ export default function GameInterface() {
                         <div
                           key={i}
                           className="aspect-square equipment-slot flex items-center justify-center"
-                          title={i === 0 ? "Small Healing Potion" : "Empty"}
-                        >
-                          {i === 0 ? (
-                            <div className="w-6 h-6 rounded-md bg-dark-600" />
-                          ) : null}
-                        </div>
+                        />
                       ))}
                     </div>
                   </div>
@@ -519,7 +527,7 @@ export default function GameInterface() {
               </div>
             </div>
 
-            {/* Panel derecho: equipo + avatar */}
+            {/* Panel derecho: avatar + badge */}
             <div className="dark-panel p-6 max-w-4x2 mx-auto">
               <div className="flex justify-center mb-8">
                 <div className="relative">
@@ -548,7 +556,7 @@ export default function GameInterface() {
                       />
                     </div>
 
-                    {/* Centro: avatar + badge con progreso integrado */}
+                    {/* Centro */}
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-48 text-center text-lg text-accent font-bold px-3 py-1 bg-[var(--panel-2)] border border-[var(--border)]">
                         {displayName}
@@ -558,21 +566,22 @@ export default function GameInterface() {
                         <User className="w-24 h-24 text-gray-300" />
                       </div>
 
-                      {/* Badge de nivel con barra de progreso detrás */}
-                      <div className="w-48 h-8 rounded-b-lg border border-[var(--border)] relative overflow-hidden bg-[var(--panel-2)]">
-                        {/* fill de XP */}
+                      {/* Badge + barra */}
+                      <div
+                        className="w-48 h-9 rounded-b-xl border border-[var(--border)] relative overflow-hidden bg-[var(--panel-2)]
+                                      shadow-[inset_0_1px_0_rgba(255,255,255,.04),inset_0_-1px_0_rgba(0,0,0,.4)]"
+                      >
                         <div
-                          className={`absolute inset-y-0 left-0 ${xpColor} transition-all`}
+                          className={fillClass}
                           style={{ width: `${pct100}%` }}
+                          role="progressbar"
                           aria-valuemin={0}
                           aria-valuemax={100}
                           aria-valuenow={pct100}
-                          role="progressbar"
                         />
-                        {/* texto por encima */}
                         <div className="relative z-10 w-full h-full flex items-center justify-center">
-                          <span className="text-white font-bold text-sm">
-                            Level {lvl}
+                          <span className="text-white font-bold text-[13px] tracking-wide">
+                            Level {lvl} · {pct100}%
                           </span>
                         </div>
                       </div>
@@ -591,7 +600,7 @@ export default function GameInterface() {
                       </div>
                     </div>
 
-                    {/* Derecha accesorios */}
+                    {/* Derecha */}
                     <div className="flex flex-col gap-3 items-center justify-center">
                       <EquipmentSlotView
                         slot="amulet"
@@ -614,7 +623,7 @@ export default function GameInterface() {
                 </div>
               </div>
 
-              {/* Dos columnas: Character Stats (5) | Combat Stats (5) */}
+              {/* Character Stats (simple) */}
               {data && (
                 <div className="grid grid-cols-2 gap-4 mb-6">
                   <div className="card-muted p-4">
@@ -631,12 +640,9 @@ export default function GameInterface() {
                           <span className="text-gray-300 text-sm">
                             {labelize(String(key))}
                           </span>
-                          <div className="flex items-center space-x-3">
-                            <span className="text-white font-bold">
-                              {data.stats[key]}
-                            </span>
-                            <Plus className="w-4 h-4 text-green-500 cursor-pointer hover:text-green-400 transition-colors" />
-                          </div>
+                          <span className="text-white font-bold">
+                            {data.stats[key]}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -667,7 +673,7 @@ export default function GameInterface() {
                 </div>
               )}
 
-              {/* Inventario (placeholder) */}
+              {/* Inventario */}
               <div className="border-t border-[var(--border)] pt-6">
                 <div className="flex items-centered justify-between mb-4">
                   <h3 className="text-white font-semibold flex items-center">
