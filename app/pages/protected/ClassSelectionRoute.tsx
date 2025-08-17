@@ -1,4 +1,4 @@
-/* Proteje la ruta "/" en caso de que se quiera ir redirigir desde /game si el usuario ya tiene class */
+// src/pages/protected/ClassSelectionRoute.tsx
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
@@ -13,7 +13,7 @@ const ClassSelectionRoute = () => {
     if (authLoading) return;
 
     if (classChosen) {
-      navigate("/game");
+      navigate("/game", { replace: true });
     } else {
       setShouldRender(true);
     }

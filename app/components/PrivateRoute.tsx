@@ -1,5 +1,6 @@
+// src/components/PrivateRoute.tsx
 import { Navigate } from "react-router-dom";
-import { JSX, useState, useEffect } from "react";
+import { JSX, useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import GlobalSpinner from "./GlobalSpinner";
 
@@ -17,19 +18,17 @@ export const PrivateRoute = ({
   const [checkingClassChosen, setCheckingClassChosen] = useState(true);
 
   useEffect(() => {
-    // Esto solo corre en el cliente, después del primer render
     const storedClassChosen = localStorage.getItem("classChosen");
     setClassChosen(storedClassChosen);
     setCheckingClassChosen(false);
   }, []);
 
-  // Mientras cargas el estado auth o classChosen, muestra spinner
   if (authLoading || checkingClassChosen) return <GlobalSpinner />;
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
   if (requireClassChosen && classChosen !== "true") {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/select-class" replace />;
   }
 
   return children;

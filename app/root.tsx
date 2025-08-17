@@ -11,6 +11,7 @@ import { AuthProvider } from "./context/AuthContext";
 
 import type { Route } from "../types/root";
 import "./app.css";
+import "./config/axios";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -35,7 +36,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <AuthProvider> {/* 🔐 Envuelve tu app aquí */}
+        <AuthProvider>
+          {" "}
+          {/* 🔐 Envuelve tu app aquí */}
           {children}
           <ScrollRestoration />
           <Scripts />
