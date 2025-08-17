@@ -24,7 +24,7 @@ import {
   Star,
   FlaskConical as Flask,
 } from "lucide-react";
-import type { CharacterApi, EquipmentSlot } from "../../types/character";
+import type { CharacterApi, EquipmentSlot, Stats } from "../../types/character";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3030/api";
 
@@ -140,6 +140,8 @@ export default function GameInterface() {
   const [progression, setProgression] = useState<ProgressionApi | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [allocating, setAllocating] = useState<keyof Stats | null>(null);
+  const canAllocate = (data?.availablePoints ?? 0) > 0;
 
   const client = useMemo(() => {
     const instance = axios.create({
@@ -190,6 +192,19 @@ export default function GameInterface() {
       mounted = false;
     };
   }, [client]);
+
+  async function plusStat(key: keyof Stats) {
+    if (!canAllocate || allocating) return;
+    try {
+      setAllocating(key);
+      await axios.post("/character/allocate", { allocate: { [key]: 1 } });
+      // Re-fetch del personaje para refrescar valores
+      const res = await axios.get<CharacterApi>("/character/me");
+      setData(res.data); // usa tu setData existente
+    } finally {
+      setAllocating(null);
+    }
+  }
 
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -630,7 +645,13 @@ export default function GameInterface() {
                     <h3 className="text-white font-semibold mb-4 flex items-center text-base">
                       <Zap className="w-5 h-5 mr-3 text-accent" /> Character
                       Stats
+                      {canAllocate && (
+                        <span className="ml-auto text-[11px] px-2 py-0.5 rounded bg-white/10 border border-[var(--border)] text-zinc-200">
+                          {data.availablePoints} pts
+                        </span>
+                      )}
                     </h3>
+
                     <div className="space-y-3">
                       {STATS_LEFT_5.map((key) => (
                         <div
@@ -640,9 +661,23 @@ export default function GameInterface() {
                           <span className="text-gray-300 text-sm">
                             {labelize(String(key))}
                           </span>
-                          <span className="text-white font-bold">
-                            {data.stats[key]}
-                          </span>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-white font-bold">
+                              {data.stats[key]}
+                            </span>
+                            {canAllocate && (
+                              <button
+                                type="button"
+                                onClick={() => plusStat(key as keyof Stats)}
+                                disabled={allocating === (key as keyof Stats)}
+                                className="w-6 h-6 inline-flex items-center justify-center rounded-md border border-[var(--border)] text-white/90 hover:bg-white/10 disabled:opacity-50"
+                                title="Asignar 1 punto"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
