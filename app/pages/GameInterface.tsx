@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
@@ -35,7 +35,6 @@ const STATS_LEFT_5: (keyof CharacterApi["stats"])[] = [
   "endurance",
   "luck",
 ];
-
 const ORDERED_RESIST: (keyof CharacterApi["resistances"])[] = [
   "fire",
   "ice",
@@ -52,7 +51,6 @@ const ORDERED_RESIST: (keyof CharacterApi["resistances"])[] = [
   "curse",
   "knockback",
 ];
-
 const ORDERED_COMBAT: (keyof NonNullable<CharacterApi["combatStats"]>)[] = [
   "maxHP",
   "maxMP",
@@ -87,6 +85,7 @@ type ProgressionApi = {
   xpForThisLevel: number;
   xpToNext: number;
   xpPercent?: number;
+  isMaxLevel?: boolean;
 };
 
 function labelize(key: string) {
@@ -110,6 +109,87 @@ const EquipmentSlotView = ({
   </div>
 );
 
+/* ---------- Formateo Combat ---------- */
+const PERCENT_KEYS = new Set<string>([
+  "criticalChance",
+  "damageReduction",
+  "evasion",
+  "lifeSteal",
+  "manaSteal",
+  "blockChance",
+  "criticalDamageBonus",
+]);
+const DECIMALS_NON_PERCENT: Record<string, number> = {
+  attackPower: 1,
+  magicPower: 1,
+  attackSpeed: 2,
+  blockValue: 2,
+  movementSpeed: 2,
+  maxHP: 0,
+  maxMP: 0,
+};
+function formatCombatValue(
+  key: keyof NonNullable<CharacterApi["combatStats"]>,
+  raw: number | undefined
+) {
+  const v = Number.isFinite(raw as number) ? Number(raw) : 0;
+  if (PERCENT_KEYS.has(key as string)) {
+    const places = key === "blockChance" ? 0 : 2;
+    const minShow = 0.01;
+    if (v > 0 && v < minShow && key !== "blockChance")
+      return `<${minShow.toFixed(2)}%`;
+    return `${v.toFixed(places)}%`;
+  }
+  const dec = DECIMALS_NON_PERCENT[key as string] ?? 0;
+  return v.toFixed(dec);
+}
+
+/* ---------- Brillo al cambiar Combat ---------- */
+function useGlowOnChange(obj?: Record<string, number | undefined> | null) {
+  const prevRef = useRef<Record<string, number | undefined> | null>(null);
+  const [glow, setGlow] = useState<Record<string, number>>({});
+  const first = useRef(true);
+
+  useEffect(() => {
+    if (!obj) return;
+    if (first.current) {
+      prevRef.current = obj;
+      first.current = false;
+      return;
+    }
+    const prev = prevRef.current || {};
+    const changed: string[] = [];
+    for (const k of Object.keys(obj)) {
+      const now = Number(obj[k] ?? 0);
+      const before = Number(prev[k] ?? 0);
+      if (Math.abs(now - before) > 1e-6) changed.push(k);
+    }
+    if (changed.length) {
+      setGlow((g) => {
+        const n = { ...g };
+        const ts = Date.now();
+        changed.forEach((k) => (n[k] = ts));
+        return n;
+      });
+      const id = setTimeout(() => {
+        setGlow((g) => {
+          const cutoff = Date.now() - 900;
+          const n: Record<string, number> = {};
+          for (const [k, t] of Object.entries(g)) if (t > cutoff) n[k] = t;
+          return n;
+        });
+      }, 1000);
+      return () => clearTimeout(id);
+    }
+    prevRef.current = obj;
+  }, [obj]);
+
+  return glow;
+}
+const asIndexable = (cs: CharacterApi["combatStats"] | null | undefined) =>
+  cs ? { ...(cs as unknown as Record<string, number | undefined>) } : null;
+
+/* ---------- Elegir stat principal (texto) ---------- */
 function pickPrimaryPower(data?: CharacterApi | null): {
   key: "attackPower" | "magicPower";
   label: string;
@@ -159,6 +239,7 @@ export default function GameInterface() {
     return instance;
   }, [token]);
 
+  // carga
   useEffect(() => {
     let mounted = true;
     setLoading(true);
@@ -166,17 +247,12 @@ export default function GameInterface() {
 
     Promise.all([
       client.get<CharacterApi>("/character/me"),
-      client.get<ProgressionApi>("/character/progression").catch((e) => {
-        console.warn("GET /character/progression failed:", e?.response ?? e);
-        return { data: null as any };
-      }),
+      client.get<ProgressionApi>("/character/progression"),
     ])
       .then(([meRes, progRes]) => {
         if (!mounted) return;
-        console.log("GET /character/me response:", meRes);
-        console.log("GET /character/progression response:", progRes);
         setData(meRes.data);
-        setProgression(progRes?.data ?? null);
+        setProgression(progRes.data);
       })
       .catch((err) => {
         if (!mounted) return;
@@ -193,14 +269,25 @@ export default function GameInterface() {
     };
   }, [client]);
 
+  const glow = useGlowOnChange(asIndexable(data?.combatStats));
+
   async function plusStat(key: keyof Stats) {
     if (!canAllocate || allocating) return;
     try {
       setAllocating(key);
-      await axios.post("/character/allocate", { allocate: { [key]: 1 } });
-      // Re-fetch del personaje para refrescar valores
-      const res = await axios.get<CharacterApi>("/character/me");
-      setData(res.data); // usa tu setData existente
+      await client.post("/character/allocate", { allocations: { [key]: 1 } });
+      // refrescamos ambas llamadas para ver puntos restantes y exp/level reales
+      const [me, prog] = await Promise.all([
+        client.get<CharacterApi>("/character/me"),
+        client.get<ProgressionApi>("/character/progression"),
+      ]);
+      setData(me.data);
+      setProgression(prog.data);
+      setError(null);
+    } catch (e: any) {
+      setError(
+        e?.response?.data?.message || e?.message || "Error asignando puntos"
+      );
     } finally {
       setAllocating(null);
     }
@@ -212,19 +299,14 @@ export default function GameInterface() {
     navigate("/login", { replace: true });
   };
 
-  // dinámico por URL
   const isCharacter = location.pathname.startsWith("/game");
   const isArena = location.pathname.startsWith("/arena");
 
+  // Mostrar nivel/EXP siempre desde progression
   const lvl = progression?.level ?? data?.level ?? "—";
-  const expNow = progression?.experience ?? data?.experience ?? 0;
-  const startLvl = progression?.currentLevelAt ?? 0;
-  const nextAt = progression?.nextLevelAt ?? 0;
-  const xpSince = progression?.xpSinceLevel ?? Math.max(0, expNow - startLvl);
-  const xpForLevel =
-    progression?.xpForThisLevel ?? Math.max(1, nextAt - startLvl);
-  const xpPct = progression?.xpPercent ?? Math.min(1, xpSince / xpForLevel);
-  const pct100 = Math.round(xpPct * 100);
+  const xpSince = progression?.xpSinceLevel ?? 0;
+  const xpForLevel = progression?.xpForThisLevel ?? 1;
+  const pct100 = Math.round((progression?.xpPercent ?? 0) * 100);
 
   const clazz = (data as any)?.class as
     | {
@@ -277,6 +359,11 @@ export default function GameInterface() {
 
   return (
     <div className="min-h-screen text-sm leading-tight space-y-2 bg-[var(--bg)] relative">
+      <style>{`
+        @keyframes statGlowPop { 0%{text-shadow:none;transform:translateZ(0)}25%{text-shadow:0 0 10px rgba(120,120,255,.9),0 0 20px rgba(120,120,255,.5)}100%{text-shadow:none} }
+        .stat-glow { animation: statGlowPop 900ms ease-out; }
+      `}</style>
+
       {/* Navbar */}
       <header className="relative z-10 dark-panel m-4 p-4 flex justify-between items-center">
         <div className="flex items-center space-x-8">
@@ -284,7 +371,6 @@ export default function GameInterface() {
             Nocthalis
           </h1>
         </div>
-
         <nav className="flex items-center space-x-6 text-sm">
           {NAV_ITEMS.map((item) => (
             <a
@@ -297,7 +383,6 @@ export default function GameInterface() {
               {item.label}
             </a>
           ))}
-
           <button
             type="button"
             onClick={handleLogout}
@@ -310,7 +395,7 @@ export default function GameInterface() {
       </header>
 
       <div className="relative z-10 flex h-[calc(100vh-40px)]">
-        {/* Menú lateral dinámico */}
+        {/* Sidebar */}
         <aside className="w-59 h-215 p-2 space-y-1 ml-1 rounded-lg shadow-lg border border-[var(--border)] bg-[var(--panel-2)]">
           {[
             {
@@ -368,10 +453,10 @@ export default function GameInterface() {
           })}
         </aside>
 
-        {/* Contenido principal */}
+        {/* Main */}
         <main className="flex-1 space-y-4">
           <div className="grid grid-cols-3 gap-1 h-[calc(100%-40px)]">
-            {/* Columna izquierda (igual que antes) */}
+            {/* Left col */}
             <div className="col-span-2 ml-1">
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel-2)] p-4 space-y-6 shadow-lg">
                 {loading && (
@@ -398,11 +483,8 @@ export default function GameInterface() {
                       <li>
                         <strong>Lv:</strong> {lvl}
                       </li>
-                      <li
-                        title={`En este nivel: ${xpSince}/${xpForLevel} • Falta: ${Math.max(0, xpForLevel - xpSince)}`}
-                      >
-                        <strong>Exp:</strong> {xpSince}/
-                        {Math.max(0, xpForLevel - xpSince)} ({pct100}%)
+                      <li title={`En este nivel: ${xpSince}/${xpForLevel}`}>
+                        <strong>Exp:</strong> {xpSince}/{xpForLevel} ({pct100}%)
                       </li>
                       <li>
                         <strong>Class:</strong> {className}
@@ -429,19 +511,26 @@ export default function GameInterface() {
                           </div>
                         </div>
                       )}
-                      {unlockedUnique.map((p) => (
-                        <div key={p} className="flex items-start space-x-3">
-                          <Zap className="w-5 h-5 text-accent mt-1" />
-                          <div>
-                            <strong className="text-white">{p}</strong>
+                      {(data?.passivesUnlocked ?? [])
+                        .filter(
+                          (p) =>
+                            !clazz?.passiveDefault?.name ||
+                            p?.toLowerCase() !==
+                              clazz.passiveDefault.name.toLowerCase()
+                        )
+                        .map((p) => (
+                          <div key={p} className="flex items-start space-x-3">
+                            <Zap className="w-5 h-5 text-accent mt-1" />
+                            <div>
+                              <strong className="text-white">{p}</strong>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Resistencias y Combat */}
+                {/* Resistencias & Combat */}
                 <div className="grid grid-cols-2 gap-6 auto-rows-fr">
                   <div className="dark-panel p-4 h-full">
                     <h3 className="text-white font-semibold mb-4 text-base">
@@ -457,7 +546,7 @@ export default function GameInterface() {
                             {labelize(String(key))}
                           </span>
                           <span className="text-accent font-bold text-sm">
-                            {data?.resistances?.[key] ?? "—"}
+                            {data?.resistances?.[key] ?? 0}
                           </span>
                         </div>
                       ))}
@@ -469,7 +558,7 @@ export default function GameInterface() {
                       Combat Metrics
                     </h3>
                     <div className="grid grid-cols-2 gap-3">
-                      {combatRest.map((key) => (
+                      {ORDERED_COMBAT.map((key) => (
                         <div
                           key={String(key)}
                           className="flex justify-between items-center"
@@ -477,10 +566,20 @@ export default function GameInterface() {
                           <span className="text-gray-300 text-sm">
                             {labelize(String(key))}
                           </span>
-                          <span className="text-accent font-bold text-sm">
-                            {data?.combatStats
-                              ? String(data.combatStats[key])
-                              : "—"}
+                          <span
+                            className={`text-accent font-bold text-sm ${glow[String(key)] ? "stat-glow" : ""}`}
+                            title={String(
+                              data?.combatStats
+                                ? (data.combatStats as any)[key]
+                                : 0
+                            )}
+                          >
+                            {formatCombatValue(
+                              key,
+                              data?.combatStats
+                                ? (data.combatStats as any)[key]
+                                : 0
+                            )}
                           </span>
                         </div>
                       ))}
@@ -489,7 +588,7 @@ export default function GameInterface() {
                           Physical Defense
                         </span>
                         <span className="text-accent font-bold text-sm">
-                          {data?.stats?.physicalDefense ?? "—"}
+                          {data?.stats?.physicalDefense ?? 0}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
@@ -497,7 +596,7 @@ export default function GameInterface() {
                           Magical Defense
                         </span>
                         <span className="text-accent font-bold text-sm">
-                          {data?.stats?.magicalDefense ?? "—"}
+                          {data?.stats?.magicalDefense ?? 0}
                         </span>
                       </div>
                     </div>
@@ -542,12 +641,12 @@ export default function GameInterface() {
               </div>
             </div>
 
-            {/* Panel derecho: avatar + badge */}
+            {/* Right panel */}
             <div className="dark-panel p-6 max-w-4x2 mx-auto">
               <div className="flex justify-center mb-8">
                 <div className="relative">
                   <div className="grid grid-cols-3 gap-4 items-center">
-                    {/* Izquierda */}
+                    {/* Left */}
                     <div className="flex flex-col gap-3 items-center justify-center">
                       <EquipmentSlotView
                         slot="helmet"
@@ -571,7 +670,7 @@ export default function GameInterface() {
                       />
                     </div>
 
-                    {/* Centro */}
+                    {/* Center */}
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-48 text-center text-lg text-accent font-bold px-3 py-1 bg-[var(--panel-2)] border border-[var(--border)]">
                         {displayName}
@@ -581,13 +680,13 @@ export default function GameInterface() {
                         <User className="w-24 h-24 text-gray-300" />
                       </div>
 
-                      {/* Badge + barra */}
+                      {/* Progress bar */}
                       <div
                         className="w-48 h-9 rounded-b-xl border border-[var(--border)] relative overflow-hidden bg-[var(--panel-2)]
-                                      shadow-[inset_0_1px_0_rgba(255,255,255,.04),inset_0_-1px_0_rgba(0,0,0,.4)]"
+                          shadow-[inset_0_1px_0_rgba(255,255,255,.04),inset_0_-1px_0_rgba(0,0,0,.4)]"
                       >
                         <div
-                          className={fillClass}
+                          className="absolute inset-y-0 left-0 rounded-b-[10px] bg-gradient-to-r from-[var(--accent-weak)] via-[var(--accent)] to-[var(--accent)]/90 shadow-[0_0_10px_rgba(120,120,255,.25),inset_0_0_6px_rgba(0,0,0,.5)] transition-[width] duration-700 ease-out"
                           style={{ width: `${pct100}%` }}
                           role="progressbar"
                           aria-valuemin={0}
@@ -615,7 +714,7 @@ export default function GameInterface() {
                       </div>
                     </div>
 
-                    {/* Derecha */}
+                    {/* Right */}
                     <div className="flex flex-col gap-3 items-center justify-center">
                       <EquipmentSlotView
                         slot="amulet"
@@ -651,7 +750,6 @@ export default function GameInterface() {
                         </span>
                       )}
                     </h3>
-
                     <div className="space-y-3">
                       {STATS_LEFT_5.map((key) => (
                         <div
@@ -661,7 +759,6 @@ export default function GameInterface() {
                           <span className="text-gray-300 text-sm">
                             {labelize(String(key))}
                           </span>
-
                           <div className="flex items-center gap-2">
                             <span className="text-white font-bold">
                               {data.stats[key]}
@@ -688,7 +785,13 @@ export default function GameInterface() {
                       Combat Stats
                     </h3>
                     <div className="space-y-3">
-                      {RIGHT_FEATURED.map(({ key, label }) => (
+                      {[
+                        { key: p.key, label: p.label },
+                        { key: "evasion" as const },
+                        { key: "blockChance" as const },
+                        { key: "damageReduction" as const },
+                        { key: "criticalChance" as const },
+                      ].map(({ key, label }) => (
                         <div
                           key={String(key)}
                           className="flex justify-between items-center"
@@ -696,10 +799,20 @@ export default function GameInterface() {
                           <span className="text-gray-300 text-sm">
                             {label ?? labelize(String(key))}
                           </span>
-                          <span className="text-accent font-bold text-sm">
-                            {data?.combatStats
-                              ? String(data.combatStats[key])
-                              : "—"}
+                          <span
+                            className={`text-accent font-bold text-sm ${glow[String(key)] ? "stat-glow" : ""}`}
+                            title={String(
+                              data?.combatStats
+                                ? (data.combatStats as any)[key]
+                                : 0
+                            )}
+                          >
+                            {formatCombatValue(
+                              key,
+                              data?.combatStats
+                                ? (data.combatStats as any)[key]
+                                : 0
+                            )}
                           </span>
                         </div>
                       ))}
@@ -719,7 +832,6 @@ export default function GameInterface() {
                     <span className="text-accent">—</span>/—
                   </div>
                 </div>
-
                 <div className="grid grid-cols-5 gap-2 mb-4">
                   {Array.from({ length: 10 }, (_, i) => (
                     <div

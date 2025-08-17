@@ -22,7 +22,19 @@ import type { CharacterApi, Stats, CombatStats } from "../../types/character";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3030/api";
 
-/* ----------------------- tipos de arena / pvp ----------------------- */
+/* ---------------- tipos auxiliares ---------------- */
+type ProgressionApi = {
+  level: number;
+  experience: number;
+  currentLevelAt: number;
+  nextLevelAt: number;
+  xpSinceLevel: number;
+  xpForThisLevel: number;
+  xpToNext: number;
+  xpPercent?: number;
+  isMaxLevel?: boolean;
+};
+
 type Opponent = {
   id: string; // userId enemigo
   name: string;
@@ -42,7 +54,7 @@ type Opponent = {
 type ViewMode = "select" | "duel";
 type DuelResult = { outcome: "win" | "lose" | "draw"; summary: string } | null;
 
-/** (LEGADO) Forma de snapshot de back estilo player/enemy */
+/** (LEGADO) Forma snapshot */
 type SnapshotBE = {
   round: number;
   actor: "player" | "enemy";
@@ -52,7 +64,7 @@ type SnapshotBE = {
   events?: string[];
 };
 
-/** (NUEVO) Timeline estilo UI/manager */
+/** (NUEVO) Timeline */
 type TimelineBE =
   | {
       turn: number;
@@ -91,7 +103,7 @@ type LogEntry = {
   text: string;
 };
 
-/* ------------------- util: labels e iconos de stats ------------------ */
+/* ---------------- util UI ---------------- */
 const labelize = (k: string) =>
   k.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
 
@@ -121,7 +133,7 @@ const COMBAT_KEYS: (keyof NonNullable<CharacterApi["combatStats"]>)[] = [
 ];
 type SnapshotKey = (typeof COMBAT_KEYS)[number];
 
-/* -------------------- Pasivas: textos cortos por clase -------------------- */
+/* ---------------- pasivas ---------------- */
 function passiveShortForClass(cls?: string) {
   const c = (cls ?? "").toLowerCase();
   if (c.includes("guerrero")) return "Espíritu de Guardia: +5% DR, +3% Bloqueo";
@@ -133,7 +145,6 @@ function passiveShortForClass(cls?: string) {
   return null;
 }
 
-/* --------------------- Badge visual para mostrar pasiva -------------------- */
 function PassiveBadge({
   className,
   passive,
@@ -159,7 +170,7 @@ function PassiveBadge({
   );
 }
 
-/* --------------------------- component portrait --------------------------- */
+/* ---------------- portrait ---------------- */
 function BattlePortrait({
   side,
   name,
@@ -241,7 +252,7 @@ function BattlePortrait({
   );
 }
 
-/* --------------------------- ladder compacta --------------------------- */
+/* ---------------- ladder ---------------- */
 function LadderRow({
   index,
   opp,
@@ -256,7 +267,6 @@ function LadderRow({
   compact?: boolean;
 }) {
   if (compact) {
-    // versión ultra compacta: posición | nombre+clase | nivel
     return (
       <button
         onClick={onSelect}
@@ -279,7 +289,6 @@ function LadderRow({
     );
   }
 
-  // versión normal (no usada en este cambio, se mantiene por compat)
   return (
     <button
       onClick={onSelect}
@@ -405,7 +414,7 @@ function LadderList({
   );
 }
 
-/* --------------------------- registro visual --------------------------- */
+/* ---------------- log visual ---------------- */
 function EventIcon({ event }: { event: LogEntry["event"] }) {
   switch (event) {
     case "crit":
@@ -504,6 +513,7 @@ export default function Arena() {
   const [duelResult, setDuelResult] = useState<DuelResult>(null);
 
   const [me, setMe] = useState<CharacterApi | null>(null);
+  const [prog, setProg] = useState<ProgressionApi | null>(null);
   const [opponents, setOpponents] = useState<Opponent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedOpp = opponents.find((o) => o.id === selectedId) || null;
@@ -552,6 +562,7 @@ export default function Arena() {
     };
   };
 
+  // carga inicial: me + progression + oponentes
   useEffect(() => {
     let mounted = true;
     setLoading(true);
@@ -559,11 +570,13 @@ export default function Arena() {
 
     Promise.all([
       client.get<CharacterApi>("/character/me"),
+      client.get<ProgressionApi>("/character/progression"),
       client.get<any>(`/arena/opponents?size=24&levelSpread=20`),
     ])
-      .then(([meRes, oppRes]) => {
+      .then(([meRes, progRes, oppRes]) => {
         if (!mounted) return;
         setMe(meRes.data);
+        setProg(progRes.data);
 
         const rawList =
           oppRes.data?.opponents ??
@@ -596,7 +609,7 @@ export default function Arena() {
 
   const myName = (me as any)?.username ?? me?.name ?? "—";
   const myClass = (me as any)?.className ?? (me as any)?.class?.name ?? "—";
-  const myLevel = me?.level ?? "—";
+  const myLevel = prog?.level ?? me?.level ?? "—"; // <-- nivel efectivo
   const myMaxHP = Math.round(me?.combatStats?.maxHP ?? 0);
 
   useEffect(() => {
@@ -858,6 +871,16 @@ export default function Arena() {
                 : "Resultado: Empate.",
         },
       ]);
+
+      // 🔄 REFRESH post-combate: me + progression (+ oponentes opcional)
+      try {
+        const [meRes, progRes] = await Promise.all([
+          client.get<CharacterApi>("/character/me"),
+          client.get<ProgressionApi>("/character/progression"),
+        ]);
+        setMe(meRes.data);
+        setProg(progRes.data);
+      } catch (_) {}
     } catch (e) {
       console.error(e);
       setView("duel");
@@ -992,7 +1015,7 @@ export default function Arena() {
                 <div className="text-xs text-red-400">{err}</div>
               )}
 
-              {/* SELECT VIEW: contenedor ULTRA COMPACTO y CENTRADO */}
+              {/* SELECT */}
               {!loading && view === "select" && (
                 <div className="flex flex-col items-center gap-3">
                   <LadderList
@@ -1014,6 +1037,7 @@ export default function Arena() {
                 </div>
               )}
 
+              {/* DUEL */}
               {!loading && view === "duel" && (
                 <>
                   <div className="relative flex items-start justify-center gap-12 mt-2">
@@ -1021,7 +1045,7 @@ export default function Arena() {
                       side="left"
                       widthClass="w-[270px]"
                       name={myName}
-                      level={myLevel}
+                      level={myLevel} // <-- nivel consistente con Character
                       className={myClass}
                       hp={hpMe}
                       maxHP={myMaxHP}
@@ -1035,30 +1059,7 @@ export default function Arena() {
                           }
                         />
                       }
-                      footerList={
-                        me?.combatStats && (
-                          <ul className="divide-y divide-[var(--border)]">
-                            {COMBAT_KEYS.map((k) => (
-                              <li
-                                key={String(k)}
-                                className="flex items-center justify-between px-3 py-2"
-                              >
-                                <div className="flex items-center gap-2 text-gray-300">
-                                  <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-[rgba(120,120,255,.08)] border border-[var(--border)] text-[var(--accent)]">
-                                    <StatIcon k={String(k)} />
-                                  </span>
-                                  <span className="text-[12px]">
-                                    {labelize(String(k))}
-                                  </span>
-                                </div>
-                                <span className="text-[12px] font-semibold text-[var(--accent)]">
-                                  {(me!.combatStats as any)[k]}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )
-                      }
+                      footerList={playerList}
                     />
 
                     <div className="min-w-[140px] flex flex-col items-center justify-center select-none">
@@ -1113,7 +1114,7 @@ export default function Arena() {
                     />
                   </div>
 
-                  {/* Log del combate */}
+                  {/* Log */}
                   <CombatLog entries={combatLog} />
                 </>
               )}
