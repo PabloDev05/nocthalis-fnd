@@ -1,15 +1,8 @@
-import type { Config } from "tailwindcss"
-
-// all in fixtures is set to tailwind v3 as interims solutions
+import type { Config } from "tailwindcss";
 
 const config: Config = {
   darkMode: "class",
-  content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "*.{js,ts,jsx,tsx,mdx}",
-  ],
+  content: ["./pages/**/*.{js,ts,jsx,tsx,mdx}", "./components/**/*.{js,ts,jsx,tsx,mdx}", "./app/**/*.{js,ts,jsx,tsx,mdx}", "./src/**/*.{js,ts,jsx,tsx,mdx}", "*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       fontFamily: {
@@ -80,54 +73,24 @@ const config: Config = {
           green: "#39ff14",
           pink: "#ff10f0",
         },
+        // Tokens de tu tema gótico sobrio
+        obsidian: "#0a0c10",
+        onyx: "#0d1016",
+        hematite: "#0f1218",
+        "panel-2": "#0b0e14",
+        slateborder: "#1a1f2a",
+        brass: "#9a8458",
+        accentdark: "#585caa",
+        "accentdark-weak": "#3a3e72",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
-      keyframes: {
-        "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
-        },
-        "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
-        },
-        glow: {
-          "0%": {
-            "box-shadow":
-              "0 0 5px rgba(99, 102, 241, 0.5), 0 0 10px rgba(99, 102, 241, 0.5), 0 0 15px rgba(99, 102, 241, 0.5)",
-          },
-          "100%": {
-            "box-shadow":
-              "0 0 10px rgba(99, 102, 241, 0.8), 0 0 20px rgba(99, 102, 241, 0.8), 0 0 30px rgba(99, 102, 241, 0.8)",
-          },
-        },
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        glow: "glow 2s ease-in-out infinite alternate",
-      },
-      backgroundImage: {
-        "gothic-gradient": "linear-gradient(135deg, rgba(139, 69, 19, 0.6), rgba(101, 67, 33, 0.8))",
-      },
-      backdropBlur: {
-        xs: "2px",
-      },
     },
   },
   plugins: [require("tailwindcss-animate")],
-}
-export default config
+};
+
+export default config;

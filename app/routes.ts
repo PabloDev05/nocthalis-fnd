@@ -8,15 +8,16 @@ export default [
   // flujo inicial automático
   route("/", "./pages/StartupRedirect.tsx"),
 
-  // selección de clase
+  // selección de clase (pública pero redirige si ya tenés clase)
   route("/select-class", "./pages/protected/ClassSelectionRoute.tsx"),
 
   // protegidas
-  route("/dashboard", "./pages/protected/ProtectedDashboard.tsx"),
+  route("/arena", "./pages/protected/ProtectedArena.tsx"),
   route("/game", "./pages/protected/ProtectedGameInterface.tsx"),
 
-  // Test de diagrama de clases e info.
+  // utilidades / pruebas
   route("/class-diagram", "./pages/ClassDiagram.tsx"),
 
+  // 404
   route("*", "./pages/NotFound.tsx"),
 ] satisfies RouteConfig;

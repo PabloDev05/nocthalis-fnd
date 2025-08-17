@@ -6,7 +6,9 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import PublicRoute from "./PublicRoute";
 
-const API_BASE_URL = "http://localhost:3030/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:3030/api";
+const isValidObjectId = (s: string) => /^[a-f0-9]{24}$/i.test(s);
 
 const Register = () => {
   const [serverError, setServerError] = useState("");
@@ -14,41 +16,44 @@ const Register = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated, classChosen } = useAuth();
 
-  const selectedClass = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem("selectedClass");
-  }, []);
+  const selectedClassId = useMemo(
+    () =>
+      typeof window === "undefined"
+        ? null
+        : localStorage.getItem("selectedClassId"),
+    []
+  );
+  const selectedClassName = useMemo(
+    () =>
+      typeof window === "undefined"
+        ? null
+        : localStorage.getItem("selectedClassName"),
+    []
+  );
+  const selectedClassImage = useMemo(
+    () =>
+      typeof window === "undefined"
+        ? null
+        : localStorage.getItem("selectedClassImage"),
+    []
+  );
+  const selectedClassDescription = useMemo(
+    () =>
+      typeof window === "undefined"
+        ? ""
+        : localStorage.getItem("selectedClassDescription") ?? "",
+    []
+  );
 
-  const classData: Record<string, { image: string; description: string }> = {
-    Asesino: {
-      image: "/assets/classes/asesino/asesino_class_1.png",
-      description:
-        "Sombra sigilosa entre ruinas olvidadas. Su hoja envenenada susurra muerte.",
-    },
-    Guerrero: {
-      image: "/assets/classes/guerrero/guerrero_class_1.png",
-      description:
-        "Fuerza bruta y escudo inquebrantable. Avanza sin temor en la oscuridad.",
-    },
-    Mago: {
-      image: "/assets/classes/mago/mago_class_1.png",
-      description:
-        "Sabio de lo arcano. Su poder elemental arde en los confines del abismo.",
-    },
-    Arquero: {
-      image: "/assets/classes/arquero/arquero_class_1.png",
-      description:
-        "Silencioso y letal desde las sombras. Sus flechas nunca fallan.",
-    },
-  };
-
-  const currentClass = selectedClass ? classData[selectedClass] : null;
-
+  // Si ya está autenticado y con clase, va directo al juego
   useEffect(() => {
-    if (isAuthenticated && classChosen) {
-      navigate("/game");
-    }
+    if (isAuthenticated && classChosen) navigate("/game");
   }, [isAuthenticated, classChosen, navigate]);
+
+  // Si aterriza acá sin elegir clase, va a selección
+  useEffect(() => {
+    if (!selectedClassId) navigate("/select-class");
+  }, [selectedClassId, navigate]);
 
   const validationSchema = Yup.object({
     username: Yup.string().required("El nombre de usuario es obligatorio"),
@@ -77,27 +82,51 @@ const Register = () => {
     setServerError("");
     setSuccess("");
 
-    if (!selectedClass) {
-      setServerError("Debes seleccionar una clase antes de registrarte.");
+    if (!selectedClassId || !isValidObjectId(selectedClassId)) {
+      setServerError("Clase inválida. Volvé a seleccionarla.");
       setSubmitting(false);
+      navigate("/select-class");
       return;
     }
 
     try {
       const res = await axios.post(`${API_BASE_URL}/auth/register`, {
-        username: values.username,
-        email: values.email,
+        username: values.username.trim(),
+        email: values.email.trim(),
         password: values.password,
-        characterClass: selectedClass,
+        characterClass: selectedClassId,
       });
 
-      if (res.data.userId && res.data.token) {
-        login(res.data.token, values.username, true, selectedClass);
-        setSuccess(res.data.message);
-        setTimeout(() => navigate("/game"), 1000);
+      if (res.data?.userId && res.data?.token) {
+        // Guardar en contexto: token + user + classChosen + nombre de clase (UI) + ObjectId de clase
+        login(
+          res.data.token,
+          values.username,
+          true,
+          selectedClassName || null,
+          res.data.characterClass ?? null
+        );
+
+        // Limpiar SOLO selección temporal (NO borrar classChosen)
+        localStorage.removeItem("selectedClassId");
+        localStorage.removeItem("selectedClassName");
+        localStorage.removeItem("selectedClassImage");
+        localStorage.removeItem("selectedClassDescription");
+        localStorage.removeItem("selectedClassJSON");
+
+        setSuccess(res.data.message || "Usuario registrado correctamente");
+        setTimeout(() => navigate("/game"), 800);
       }
     } catch (err: any) {
-      setServerError(err.response?.data?.message || "Error al registrar");
+      if (axios.isAxiosError(err)) {
+        const raw = err.response?.data?.message || "Error al registrar";
+        const msg = /existe|duplicado|duplicate|E11000/i.test(raw)
+          ? "Usuario o email ya registrado."
+          : raw;
+        setServerError(msg);
+      } else {
+        setServerError("Error inesperado al registrar");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -107,18 +136,18 @@ const Register = () => {
     <PublicRoute>
       <div className="min-h-screen bg-gradient-to-b from-black via-[#0c0c1a] to-black text-white flex items-center justify-center px-4">
         <div className="flex flex-col md:flex-row items-start gap-6 bg-[#0e0f1c]/80 p-8 rounded-xl shadow-xl border border-[#1e1f2b] max-w-4xl w-full transition-all duration-500">
-          {currentClass && (
+          {selectedClassName && (
             <div className="md:w-1/2 flex flex-col items-center self-start">
               <div className="rounded-lg overflow-hidden shadow-xl border border-gray-700 transition duration-300 hover:shadow-purple-800/50">
                 <img
-                  src={currentClass.image}
-                  alt={selectedClass ? selectedClass : "Clase seleccionada"}
+                  src={selectedClassImage || ""}
+                  alt={selectedClassName}
                   className="w-56 h-auto object-cover"
                 />
               </div>
-              <h2 className="text-xl font-bold mt-4">{selectedClass}</h2>
+              <h2 className="text-xl font-bold mt-4">{selectedClassName}</h2>
               <p className="text-gray-400 text-sm mt-2 max-w-xs text-center">
-                {currentClass.description}
+                {selectedClassDescription}
               </p>
             </div>
           )}
@@ -188,7 +217,11 @@ const Register = () => {
 
                   <button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={
+                      isSubmitting ||
+                      !selectedClassId ||
+                      !isValidObjectId(selectedClassId)
+                    }
                     className={`w-full py-2 rounded bg-[#2f1e4d] hover:bg-[#40235f] transition duration-300 shadow-md text-white ${
                       isSubmitting ? "opacity-50 cursor-not-allowed" : ""
                     }`}
