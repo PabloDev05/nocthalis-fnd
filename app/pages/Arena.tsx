@@ -1,3 +1,4 @@
+// src/pages/Arena.tsx
 import { useEffect, useMemo, useState, useRef } from "react";
 import axios from "axios";
 import { useNavigate, useLocation } from "react-router";
@@ -22,7 +23,7 @@ import type { CharacterApi, Stats, CombatStats } from "../../types/character";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3030/api";
 
-/* ---------------- tipos auxiliares ---------------- */
+/* ---------------- tipos ---------------- */
 type ProgressionApi = {
   level: number;
   experience: number;
@@ -36,7 +37,7 @@ type ProgressionApi = {
 };
 
 type Opponent = {
-  id: string; // userId enemigo
+  id: string;
   name: string;
   level: number;
   className?: string;
@@ -54,7 +55,6 @@ type Opponent = {
 type ViewMode = "select" | "duel";
 type DuelResult = { outcome: "win" | "lose" | "draw"; summary: string } | null;
 
-/** (LEGADO) Forma snapshot */
 type SnapshotBE = {
   round: number;
   actor: "player" | "enemy";
@@ -64,7 +64,6 @@ type SnapshotBE = {
   events?: string[];
 };
 
-/** (NUEVO) Timeline */
 type TimelineBE =
   | {
       turn: number;
@@ -103,14 +102,28 @@ type LogEntry = {
   text: string;
 };
 
-/* ---------------- util UI ---------------- */
+/* ---------------- utils ---------------- */
 const labelize = (k: string) =>
   k.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+
+const asInt = (v: any) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n) : 0;
+};
+
+function pickPrimaryPowerName(cls?: string) {
+  const c = (cls ?? "").toLowerCase();
+  return /mago|mage|wizard|sorcer/.test(c)
+    ? ("magicPower" as const)
+    : ("attackPower" as const);
+}
 
 function StatIcon({ k }: { k: string }) {
   switch (k) {
     case "attackPower":
       return <SwordIcon className="w-3.5 h-3.5" />;
+    case "magicPower":
+      return <Flame className="w-3.5 h-3.5" />;
     case "evasion":
       return <Zap className="w-3.5 h-3.5" />;
     case "blockChance":
@@ -124,24 +137,15 @@ function StatIcon({ k }: { k: string }) {
   }
 }
 
-const COMBAT_KEYS: (keyof NonNullable<CharacterApi["combatStats"]>)[] = [
-  "attackPower",
-  "evasion",
-  "blockChance",
-  "damageReduction",
-  "criticalChance",
-];
-type SnapshotKey = (typeof COMBAT_KEYS)[number];
-
-/* ---------------- pasivas ---------------- */
+/* ---------------- pasivas (texto simple) ---------------- */
 function passiveShortForClass(cls?: string) {
   const c = (cls ?? "").toLowerCase();
-  if (c.includes("guerrero")) return "Espíritu de Guardia: +5% DR, +3% Bloqueo";
+  if (c.includes("guerrero")) return "Espíritu de Guardia: +5 DR, +3 Bloqueo";
   if (c.includes("mago"))
-    return "Llama Interna: +2% daño/ataque (máx 10%) + 30% MP→daño";
-  if (c.includes("asesino")) return "Sombra Letal: +30% daño crítico";
+    return "Llama Interna: 30% del Poder Mágico a daño base +2 daño/ataque (máx +10).";
+  if (c.includes("asesino")) return "Sombra Letal: +30 daño crítico";
   if (c.includes("arquero"))
-    return "Ojo del Águila: +1.5% daño/ataque (máx 7.5%)";
+    return "Ojo del Águila: +1.5 daño/ataque (máx +7.5)";
   return null;
 }
 
@@ -156,7 +160,6 @@ function PassiveBadge({
     ? `${passive.name}${passive.description ? `: ${passive.description}` : ""}`
     : passiveShortForClass(className ?? "");
   if (!short) return null;
-
   return (
     <div className="mb-2 rounded-md px-3 py-2 bg-[rgba(255,255,255,.05)]">
       <div className="flex items-center gap-2">
@@ -241,7 +244,7 @@ function BattlePortrait({
         <div className="h-7 rounded-none border-y border-[var(--border)] bg-[rgba(255,255,255,.03)] overflow-hidden relative">
           <div className={hpFill} style={{ width: `${pct}%` }} />
           <div className="absolute inset-0 flex items-center justify-center text-[11px] text-white/95 font-semibold tracking-wide">
-            {hp} / {maxHP} HP
+            {asInt(hp)} / {asInt(maxHP)} HP
           </div>
         </div>
       </div>
@@ -351,9 +354,7 @@ function LadderList({
           onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar…"
           className={`bg-transparent border border-[var(--border)] rounded px-2 py-1 text-sm text-white
-                     hover:border-[var(--accent-weak)] focus:outline-none ${
-                       compact ? "w-32" : ""
-                     }`}
+                     hover:border-[var(--accent-weak)] focus:outline-none ${compact ? "w-32" : ""}`}
         />
       </div>
 
@@ -562,7 +563,7 @@ export default function Arena() {
     };
   };
 
-  // carga inicial: me + progression + oponentes
+  // carga inicial
   useEffect(() => {
     let mounted = true;
     setLoading(true);
@@ -609,25 +610,33 @@ export default function Arena() {
 
   const myName = (me as any)?.username ?? me?.name ?? "—";
   const myClass = (me as any)?.className ?? (me as any)?.class?.name ?? "—";
-  const myLevel = prog?.level ?? me?.level ?? "—"; // <-- nivel efectivo
-  const myMaxHP = Math.round(me?.combatStats?.maxHP ?? 0);
+  const myLevel = prog?.level ?? me?.level ?? "—";
+  const myMaxHP = asInt(me?.combatStats?.maxHP ?? 0);
 
   useEffect(() => {
     stopLoop();
     if (view === "duel") {
       setHpMe(myMaxHP);
-      setHpOpp(Math.round(selectedOpp?.maxHP ?? 0));
+      setHpOpp(asInt(selectedOpp?.maxHP ?? 0));
     }
   }, [view, selectedId, myMaxHP, selectedOpp?.maxHP]);
 
+  /* ---------- métricas dinámicas ---------- */
   function MetricsList({
+    keys,
     values,
   }: {
-    values: Partial<Record<SnapshotKey, number | string | undefined>>;
+    keys: (keyof NonNullable<CharacterApi["combatStats"]>)[];
+    values: Partial<
+      Record<
+        keyof NonNullable<CharacterApi["combatStats"]>,
+        number | string | undefined
+      >
+    >;
   }) {
     return (
       <ul className="divide-y divide-[var(--border)]">
-        {COMBAT_KEYS.map((k) => (
+        {keys.map((k) => (
           <li
             key={String(k)}
             className="flex items-center justify-between px-3 py-2"
@@ -639,7 +648,7 @@ export default function Arena() {
               <span className="text-[12px]">{labelize(String(k))}</span>
             </div>
             <span className="text-[12px] font-semibold text-[var(--accent)]">
-              {values[k] ?? "—"}
+              {asInt(values[k] as number)}
             </span>
           </li>
         ))}
@@ -647,10 +656,21 @@ export default function Arena() {
     );
   }
 
+  const primaryKeyMe = pickPrimaryPowerName(myClass);
+  const playerKeys: (keyof NonNullable<CharacterApi["combatStats"]>)[] = [
+    primaryKeyMe,
+    "evasion",
+    "blockChance",
+    "damageReduction",
+    "criticalChance",
+  ];
+
   const playerList = me?.combatStats ? (
     <MetricsList
+      keys={playerKeys}
       values={{
         attackPower: me.combatStats.attackPower,
+        magicPower: me.combatStats.magicPower,
         evasion: me.combatStats.evasion,
         blockChance: me.combatStats.blockChance,
         damageReduction: me.combatStats.damageReduction,
@@ -659,10 +679,21 @@ export default function Arena() {
     />
   ) : null;
 
+  const primaryKeyOpp = pickPrimaryPowerName(selectedOpp?.className);
+  const enemyKeys: (keyof NonNullable<CharacterApi["combatStats"]>)[] = [
+    primaryKeyOpp,
+    "evasion",
+    "blockChance",
+    "damageReduction",
+    "criticalChance",
+  ];
+
   const enemyList = (
     <MetricsList
+      keys={enemyKeys}
       values={{
         attackPower: selectedOpp?.combatStats?.attackPower,
+        magicPower: selectedOpp?.combatStats?.magicPower,
         evasion: selectedOpp?.combatStats?.evasion,
         blockChance: selectedOpp?.combatStats?.blockChance,
         damageReduction: selectedOpp?.combatStats?.damageReduction,
@@ -671,6 +702,7 @@ export default function Arena() {
     />
   );
 
+  /* ---------- mapping timeline ---------- */
   function mapBackendToUi(items: TimelineBE[] = []): PvPTurn[] {
     return (items ?? []).map((s: any, idx: number) => {
       if (s && (s.playerHP != null || s.enemyHP != null || s.round != null)) {
@@ -685,9 +717,9 @@ export default function Arena() {
         return {
           turn: Number(s.round ?? idx + 1),
           actor: isPlayerAtk ? "attacker" : "defender",
-          damage: Number(s.damage ?? 0),
-          attackerHP: Number(isPlayerAtk ? s.playerHP : (s.enemyHP ?? 0)),
-          defenderHP: Number(isPlayerAtk ? s.enemyHP : (s.playerHP ?? 0)),
+          damage: asInt(s.damage ?? 0),
+          attackerHP: asInt(isPlayerAtk ? s.playerHP : (s.enemyHP ?? 0)),
+          defenderHP: asInt(isPlayerAtk ? s.enemyHP : (s.playerHP ?? 0)),
           event,
           eventsRaw: Array.isArray(s.events) ? s.events : undefined,
         };
@@ -696,12 +728,12 @@ export default function Arena() {
       return {
         turn: Number(s.turn ?? idx + 1),
         actor: actor ?? "attacker",
-        damage: Number(s.damage ?? 0),
-        attackerHP: Number(s.attackerHP ?? 0),
-        defenderHP: Number(s.defenderHP ?? 0),
+        damage: asInt(s.damage ?? 0),
+        attackerHP: asInt(s.attackerHP ?? 0),
+        defenderHP: asInt(s.defenderHP ?? 0),
         event:
           (s.event as PvPTurn["event"]) ??
-          (Number(s.damage) > 0 ? "hit" : "miss"),
+          (asInt(s.damage) > 0 ? "hit" : "miss"),
         eventsRaw: Array.isArray(s.events) ? s.events : undefined,
       };
     });
@@ -711,18 +743,8 @@ export default function Arena() {
     stopLoop();
     setCombatLog([]);
 
-    const num = (v: any, def = 0) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : def;
-    };
-    const clamp = (v: any, min: number, max: number) => {
-      const n = num(v, min);
-      return Math.max(min, Math.min(max, n));
-    };
-    const toInt = (v: any) => Math.round(num(v, 0));
-
     const myMax = myMaxHP;
-    const oppMax = Math.round(selectedOpp?.maxHP ?? 0);
+    const oppMax = asInt(selectedOpp?.maxHP ?? 0);
     setHpMe(myMax);
     setHpOpp(oppMax);
 
@@ -735,10 +757,10 @@ export default function Arena() {
 
       const isAtk = turn.actor === "attacker";
       const e: PvPTurn["event"] =
-        turn.event ?? (num(turn.damage, 0) <= 0 ? "miss" : "hit");
+        turn.event ?? (asInt(turn.damage) <= 0 ? "miss" : "hit");
 
-      const nextOpp = clamp(turn.defenderHP, 0, oppMax);
-      const nextMe = clamp(turn.attackerHP, 0, myMax);
+      const nextOpp = Math.max(0, Math.min(oppMax, asInt(turn.defenderHP)));
+      const nextMe = Math.max(0, Math.min(myMax, asInt(turn.attackerHP)));
 
       if (isAtk) setHpOpp(nextOpp);
       else setHpMe(nextMe);
@@ -784,9 +806,7 @@ export default function Arena() {
         text:
           e === "miss"
             ? `${who} falla contra ${tgt}. (${tgtHPAfter}/${tgtMax} HP)`
-            : `${who} ${label.toLowerCase()} a ${tgt} por ${toInt(
-                turn.damage
-              )}. (${tgtHPAfter}/${tgtMax} HP)`,
+            : `${who} ${label.toLowerCase()} a ${tgt} por ${asInt(turn.damage)}. (${tgtHPAfter}/${tgtMax} HP)`,
       };
       setCombatLog((prev) => prev.concat(line));
 
@@ -799,28 +819,62 @@ export default function Arena() {
   async function startChallenge() {
     if (!selectedOpp) return;
     try {
+      // crear match
       const crt = await client.post("/arena/challenges", {
         opponentId: selectedOpp.id,
       });
+      const matchId: string | undefined = crt?.data?.matchId;
 
       setView("duel");
       setCenterLabel("VS");
       setDuelResult(null);
       setCombatLog([]);
 
-      const { matchId } =
-        (crt.data as { matchId: string }) ?? ({ matchId: "" } as any);
+      if (!matchId) {
+        setCenterLabel("DRAW");
+        setDuelResult({
+          outcome: "draw",
+          summary: "No se pudo crear el combate (id inválido).",
+        });
+        return;
+      }
 
+      // (opcional) simulate previo; si falla, seguimos
       try {
         await client.post("/combat/simulate", { matchId });
       } catch {}
 
-      const pvp = await client.post("/combat/resolve", { matchId });
+      // resolver (persiste)
+      let pvp: any;
+      try {
+        pvp = await client.post("/combat/resolve", { matchId });
+      } catch (e) {
+        // fallback: preview GET si el resolve explota
+        try {
+          const prev = await client.get("/combat/simulate", {
+            params: { matchId },
+          });
+          pvp = {
+            data: {
+              ok: true,
+              outcome: prev.data?.outcome ?? "draw",
+              timeline: prev.data?.timeline ?? prev.data?.snapshots ?? [],
+              snapshots: prev.data?.snapshots ?? [],
+              rewards: null,
+              __preview: true,
+            },
+          };
+        } catch {
+          throw e;
+        }
+      }
+
+      const isPreview = !!pvp?.data?.__preview;
       const outcome = (pvp.data?.outcome as "win" | "lose" | "draw") ?? "draw";
       const rw = (pvp.data?.rewards as any) ?? {};
-      const honor = Number(rw.honorDelta ?? rw.honor ?? 0);
-      const xp = Number(rw.xpGained ?? rw.xp ?? 0);
-      const gold = Number(rw.goldGained ?? rw.gold ?? 0);
+      const honor = asInt(rw.honorDelta ?? rw.honor ?? 0);
+      const xp = asInt(rw.xpGained ?? rw.xp ?? 0);
+      const gold = asInt(rw.goldGained ?? rw.gold ?? 0);
 
       const rawTimeline: TimelineBE[] =
         (pvp.data?.timeline as TimelineBE[]) ??
@@ -840,14 +894,15 @@ export default function Arena() {
       setDuelResult({
         outcome,
         summary: [
+          isPreview ? "Vista previa. " : "",
           outcome === "win"
             ? "Has vencido."
             : outcome === "lose"
               ? "Has sido derrotado."
               : "Empate.",
-          honor ? ` ${honor >= 0 ? "+" : ""}${honor} Honor.` : "",
-          xp ? ` +${xp} XP.` : "",
-          gold ? ` +${gold} Oro.` : "",
+          !isPreview && honor ? ` ${honor >= 0 ? "+" : ""}${honor} Honor.` : "",
+          !isPreview && xp ? ` +${xp} XP.` : "",
+          !isPreview && gold ? ` +${gold} Oro.` : "",
         ].join(""),
       });
 
@@ -872,15 +927,17 @@ export default function Arena() {
         },
       ]);
 
-      // 🔄 REFRESH post-combate: me + progression (+ oponentes opcional)
-      try {
-        const [meRes, progRes] = await Promise.all([
-          client.get<CharacterApi>("/character/me"),
-          client.get<ProgressionApi>("/character/progression"),
-        ]);
-        setMe(meRes.data);
-        setProg(progRes.data);
-      } catch (_) {}
+      // refresh post-combate si fue resolve real
+      if (!isPreview) {
+        try {
+          const [meRes, progRes] = await Promise.all([
+            client.get<CharacterApi>("/character/me"),
+            client.get<ProgressionApi>("/character/progression"),
+          ]);
+          setMe(meRes.data);
+          setProg(progRes.data);
+        } catch {}
+      }
     } catch (e) {
       console.error(e);
       setView("duel");
@@ -892,7 +949,7 @@ export default function Arena() {
     }
   }
 
-  /* ----------------------------- chrome / layout ---------------------------- */
+  /* ---------------- chrome ---------------- */
   const NAV_ITEMS = [
     { label: "Terms of Use", href: "/legal/terms" },
     { label: "Privacy", href: "/legal/privacy" },
@@ -1045,7 +1102,7 @@ export default function Arena() {
                       side="left"
                       widthClass="w-[270px]"
                       name={myName}
-                      level={myLevel} // <-- nivel consistente con Character
+                      level={myLevel}
                       className={myClass}
                       hp={hpMe}
                       maxHP={myMaxHP}

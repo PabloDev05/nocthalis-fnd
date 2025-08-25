@@ -1,3 +1,4 @@
+// src/pages/GameInterface.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate, useLocation } from "react-router";
@@ -28,13 +29,10 @@ import type { CharacterApi, EquipmentSlot, Stats } from "../../types/character";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3030/api";
 
-const STATS_LEFT_5: (keyof CharacterApi["stats"])[] = [
-  "strength",
-  "agility",
-  "vitality",
-  "endurance",
-  "luck",
-];
+/** ────────────────────────────────────────────────────────────────────────────
+ *  Campos visibles (alineado con backend actual)
+ *  ────────────────────────────────────────────────────────────────────────────
+ */
 const ORDERED_RESIST: (keyof CharacterApi["resistances"])[] = [
   "fire",
   "ice",
@@ -50,10 +48,12 @@ const ORDERED_RESIST: (keyof CharacterApi["resistances"])[] = [
   "bleed",
   "curse",
   "knockback",
+  "criticalChanceReduction",
+  "criticalDamageReduction",
 ];
+
 const ORDERED_COMBAT: (keyof NonNullable<CharacterApi["combatStats"]>)[] = [
   "maxHP",
-  "maxMP",
   "attackPower",
   "magicPower",
   "criticalChance",
@@ -63,7 +63,6 @@ const ORDERED_COMBAT: (keyof NonNullable<CharacterApi["combatStats"]>)[] = [
   "blockChance",
   "blockValue",
   "lifeSteal",
-  "manaSteal",
   "damageReduction",
   "movementSpeed",
 ];
@@ -109,39 +108,10 @@ const EquipmentSlotView = ({
   </div>
 );
 
-/* ---------- Formateo Combat ---------- */
-const PERCENT_KEYS = new Set<string>([
-  "criticalChance",
-  "damageReduction",
-  "evasion",
-  "lifeSteal",
-  "manaSteal",
-  "blockChance",
-  "criticalDamageBonus",
-]);
-const DECIMALS_NON_PERCENT: Record<string, number> = {
-  attackPower: 1,
-  magicPower: 1,
-  attackSpeed: 2,
-  blockValue: 2,
-  movementSpeed: 2,
-  maxHP: 0,
-  maxMP: 0,
-};
-function formatCombatValue(
-  key: keyof NonNullable<CharacterApi["combatStats"]>,
-  raw: number | undefined
-) {
-  const v = Number.isFinite(raw as number) ? Number(raw) : 0;
-  if (PERCENT_KEYS.has(key as string)) {
-    const places = key === "blockChance" ? 0 : 2;
-    const minShow = 0.01;
-    if (v > 0 && v < minShow && key !== "blockChance")
-      return `<${minShow.toFixed(2)}%`;
-    return `${v.toFixed(places)}%`;
-  }
-  const dec = DECIMALS_NON_PERCENT[key as string] ?? 0;
-  return v.toFixed(dec);
+/* ---------- Formateo simple (enteros) ---------- */
+function asInt(raw: number | undefined) {
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.round(n) : 0;
 }
 
 /* ---------- Brillo al cambiar Combat ---------- */
@@ -152,11 +122,13 @@ function useGlowOnChange(obj?: Record<string, number | undefined> | null) {
 
   useEffect(() => {
     if (!obj) return;
+
     if (first.current) {
       prevRef.current = obj;
       first.current = false;
       return;
     }
+
     const prev = prevRef.current || {};
     const changed: string[] = [];
     for (const k of Object.keys(obj)) {
@@ -164,6 +136,7 @@ function useGlowOnChange(obj?: Record<string, number | undefined> | null) {
       const before = Number(prev[k] ?? 0);
       if (Math.abs(now - before) > 1e-6) changed.push(k);
     }
+
     if (changed.length) {
       setGlow((g) => {
         const n = { ...g };
@@ -171,6 +144,7 @@ function useGlowOnChange(obj?: Record<string, number | undefined> | null) {
         changed.forEach((k) => (n[k] = ts));
         return n;
       });
+
       const id = setTimeout(() => {
         setGlow((g) => {
           const cutoff = Date.now() - 900;
@@ -179,17 +153,25 @@ function useGlowOnChange(obj?: Record<string, number | undefined> | null) {
           return n;
         });
       }, 1000);
+      // cleanup del timeout
       return () => clearTimeout(id);
     }
+
+    // ✅ cortar bucles: siempre actualizar el snapshot de comparación
     prevRef.current = obj;
   }, [obj]);
 
   return glow;
 }
-const asIndexable = (cs: CharacterApi["combatStats"] | null | undefined) =>
-  cs ? { ...(cs as unknown as Record<string, number | undefined>) } : null;
 
-/* ---------- Elegir stat principal (texto) ---------- */
+// 👇 No recreamos objeto; sólo casteamos la misma referencia
+const asIndexable = (cs: CharacterApi["combatStats"] | null | undefined) =>
+  (cs ? (cs as unknown as Record<string, number | undefined>) : null) as Record<
+    string,
+    number | undefined
+  > | null;
+
+/* ---------- Elegir stat/daño principal ---------- */
 function pickPrimaryPower(data?: CharacterApi | null): {
   key: "attackPower" | "magicPower";
   label: string;
@@ -269,14 +251,19 @@ export default function GameInterface() {
     };
   }, [client]);
 
-  const glow = useGlowOnChange(asIndexable(data?.combatStats));
+  // ✅ referencia memorizada para el hook (no cambia si no cambia el objeto real)
+  const combatForGlow = useMemo(
+    () => asIndexable(data?.combatStats),
+    [data?.combatStats]
+  );
+  const glow = useGlowOnChange(combatForGlow);
 
   async function plusStat(key: keyof Stats) {
     if (!canAllocate || allocating) return;
     try {
       setAllocating(key);
-      await client.post("/character/allocate", { allocations: { [key]: 1 } });
-      // refrescamos ambas llamadas para ver puntos restantes y exp/level reales
+      // ✅ payload plano (el backend espera { strength: 1 } y no { allocations: {...} })
+      await client.post("/character/allocate", { [key]: 1 });
       const [me, prog] = await Promise.all([
         client.get<CharacterApi>("/character/me"),
         client.get<ProgressionApi>("/character/progression"),
@@ -306,7 +293,11 @@ export default function GameInterface() {
   const lvl = progression?.level ?? data?.level ?? "—";
   const xpSince = progression?.xpSinceLevel ?? 0;
   const xpForLevel = progression?.xpForThisLevel ?? 1;
-  const pct100 = Math.round((progression?.xpPercent ?? 0) * 100);
+
+  // Barra: usamos porcentaje interno para el ancho, pero no lo mostramos
+  const xpPctRaw = progression?.xpPercent ?? 0;
+  const pct100 =
+    xpPctRaw > 1 ? Math.round(xpPctRaw) : Math.round(xpPctRaw * 100);
 
   const clazz = (data as any)?.class as
     | {
@@ -324,6 +315,19 @@ export default function GameInterface() {
   const displayName = (data as any)?.username ?? ctxName ?? data?.name ?? "—";
 
   const p = pickPrimaryPower(data);
+
+  // 🔸 ELEGIMOS LA PRIMERA STAT A MOSTRAR: Intelligence si es mago; Strength si no
+  const primaryAttr: keyof CharacterApi["stats"] = p.isMage
+    ? "intelligence"
+    : "strength";
+  const STATS_LEFT: (keyof CharacterApi["stats"])[] = [
+    primaryAttr,
+    "dexterity",
+    "vitality",
+    "endurance",
+    "luck",
+  ];
+
   const RIGHT_FEATURED: Array<{
     key: keyof NonNullable<CharacterApi["combatStats"]>;
     label?: string;
@@ -352,10 +356,6 @@ export default function GameInterface() {
     });
     return Array.from(set);
   })();
-
-  const fillClass =
-    "absolute inset-y-0 left-0 rounded-b-[10px] bg-gradient-to-r from-[var(--accent-weak)] via-[var(--accent)] to-[var(--accent)]/90 " +
-    "shadow-[0_0_10px_rgba(120,120,255,.25),inset_0_0_6px_rgba(0,0,0,.5)] transition-[width] duration-700 ease-out";
 
   return (
     <div className="min-h-screen text-sm leading-tight space-y-2 bg-[var(--bg)] relative">
@@ -484,7 +484,7 @@ export default function GameInterface() {
                         <strong>Lv:</strong> {lvl}
                       </li>
                       <li title={`En este nivel: ${xpSince}/${xpForLevel}`}>
-                        <strong>Exp:</strong> {xpSince}/{xpForLevel} ({pct100}%)
+                        <strong>Exp:</strong> {xpSince}/{xpForLevel}
                       </li>
                       <li>
                         <strong>Class:</strong> {className}
@@ -546,7 +546,7 @@ export default function GameInterface() {
                             {labelize(String(key))}
                           </span>
                           <span className="text-accent font-bold text-sm">
-                            {data?.resistances?.[key] ?? 0}
+                            {asInt(data?.resistances?.[key])}
                           </span>
                         </div>
                       ))}
@@ -567,15 +567,16 @@ export default function GameInterface() {
                             {labelize(String(key))}
                           </span>
                           <span
-                            className={`text-accent font-bold text-sm ${glow[String(key)] ? "stat-glow" : ""}`}
+                            className={`text-accent font-bold text-sm ${
+                              glow[String(key)] ? "stat-glow" : ""
+                            }`}
                             title={String(
                               data?.combatStats
                                 ? (data.combatStats as any)[key]
                                 : 0
                             )}
                           >
-                            {formatCombatValue(
-                              key,
+                            {asInt(
                               data?.combatStats
                                 ? (data.combatStats as any)[key]
                                 : 0
@@ -588,7 +589,7 @@ export default function GameInterface() {
                           Physical Defense
                         </span>
                         <span className="text-accent font-bold text-sm">
-                          {data?.stats?.physicalDefense ?? 0}
+                          {asInt(data?.stats?.physicalDefense)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
@@ -596,7 +597,7 @@ export default function GameInterface() {
                           Magical Defense
                         </span>
                         <span className="text-accent font-bold text-sm">
-                          {data?.stats?.magicalDefense ?? 0}
+                          {asInt(data?.stats?.magicalDefense)}
                         </span>
                       </div>
                     </div>
@@ -680,7 +681,7 @@ export default function GameInterface() {
                         <User className="w-24 h-24 text-gray-300" />
                       </div>
 
-                      {/* Progress bar */}
+                      {/* Progress bar (sin símbolo %) */}
                       <div
                         className="w-48 h-9 rounded-b-xl border border-[var(--border)] relative overflow-hidden bg-[var(--panel-2)]
                           shadow-[inset_0_1px_0_rgba(255,255,255,.04),inset_0_-1px_0_rgba(0,0,0,.4)]"
@@ -695,7 +696,7 @@ export default function GameInterface() {
                         />
                         <div className="relative z-10 w-full h-full flex items-center justify-center">
                           <span className="text-white font-bold text-[13px] tracking-wide">
-                            Level {lvl} · {pct100}%
+                            Level {lvl} · {asInt(xpSince)}/{asInt(xpForLevel)}
                           </span>
                         </div>
                       </div>
@@ -746,12 +747,12 @@ export default function GameInterface() {
                       Stats
                       {canAllocate && (
                         <span className="ml-auto text-[11px] px-2 py-0.5 rounded bg-white/10 border border-[var(--border)] text-zinc-200">
-                          {data.availablePoints} pts
+                          {asInt(data.availablePoints)} pts
                         </span>
                       )}
                     </h3>
                     <div className="space-y-3">
-                      {STATS_LEFT_5.map((key) => (
+                      {STATS_LEFT.map((key) => (
                         <div
                           key={String(key)}
                           className="flex justify-between items-center"
@@ -761,7 +762,7 @@ export default function GameInterface() {
                           </span>
                           <div className="flex items-center gap-2">
                             <span className="text-white font-bold">
-                              {data.stats[key]}
+                              {asInt(data.stats[key])}
                             </span>
                             {canAllocate && (
                               <button
@@ -807,8 +808,7 @@ export default function GameInterface() {
                                 : 0
                             )}
                           >
-                            {formatCombatValue(
-                              key,
+                            {asInt(
                               data?.combatStats
                                 ? (data.combatStats as any)[key]
                                 : 0
