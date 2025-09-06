@@ -35,6 +35,15 @@ html, body, #root {
   color: var(--text);
 }
 
+/* Brillo suave cuando cambian los combat stats */
+@keyframes stat-glow-kf {
+  0%   { text-shadow: 0 0 0 rgba(120,120,255,0); }
+  30%  { text-shadow: 0 0 10px rgba(120,120,255,.95); }
+  100% { text-shadow: 0 0 0 rgba(120,120,255,0); }
+}
+.stat-glow {
+  animation: stat-glow-kf 800ms ease-out 1;
+}
 /* ───────────────────────────────────────────────────────────── */
 /* Utilidades de componente (sin brillos ni saturación)          */
 /* ───────────────────────────────────────────────────────────── */
