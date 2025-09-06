@@ -1,3 +1,4 @@
+// src/pages/Register.tsx
 import { Formik, Form, Field, ErrorMessage, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import axios from "axios";
@@ -5,6 +6,7 @@ import { useNavigate } from "react-router";
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import PublicRoute from "./PublicRoute";
+import { Eye, EyeOff } from "lucide-react";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:3030/api";
@@ -13,6 +15,9 @@ const isValidObjectId = (s: string) => /^[a-f0-9]{24}$/i.test(s);
 const Register = () => {
   const [serverError, setServerError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const navigate = useNavigate();
   const { login, isAuthenticated, classChosen } = useAuth();
 
@@ -41,16 +46,14 @@ const Register = () => {
     () =>
       typeof window === "undefined"
         ? ""
-        : localStorage.getItem("selectedClassDescription") ?? "",
+        : (localStorage.getItem("selectedClassDescription") ?? ""),
     []
   );
 
-  // Si ya está autenticado y con clase, va directo al juego
   useEffect(() => {
     if (isAuthenticated && classChosen) navigate("/game");
   }, [isAuthenticated, classChosen, navigate]);
 
-  // Si aterriza acá sin elegir clase, va a selección
   useEffect(() => {
     if (!selectedClassId) navigate("/select-class");
   }, [selectedClassId, navigate]);
@@ -97,17 +100,17 @@ const Register = () => {
         characterClass: selectedClassId,
       });
 
-      if (res.data?.userId && res.data?.token) {
-        // Guardar en contexto: token + user + classChosen + nombre de clase (UI) + ObjectId de clase
+      // ✅ ahora validamos por token (userId ya no viene en la raíz)
+      if (res.data?.token) {
         login(
           res.data.token,
-          values.username,
+          values.email, // guardamos email en el AuthContext
           true,
-          selectedClassName || null,
-          res.data.characterClass ?? null
+          res.data.characterClassName ?? selectedClassName ?? null,
+          res.data.characterClassId ?? res.data.characterClass ?? null
         );
 
-        // Limpiar SOLO selección temporal (NO borrar classChosen)
+        // limpiar selección temporal
         localStorage.removeItem("selectedClassId");
         localStorage.removeItem("selectedClassName");
         localStorage.removeItem("selectedClassImage");
@@ -115,7 +118,9 @@ const Register = () => {
         localStorage.removeItem("selectedClassJSON");
 
         setSuccess(res.data.message || "Usuario registrado correctamente");
-        setTimeout(() => navigate("/game"), 800);
+        navigate("/game"); // navegación directa
+      } else {
+        setServerError("Respuesta inválida del servidor");
       }
     } catch (err: any) {
       if (axios.isAxiosError(err)) {
@@ -184,24 +189,48 @@ const Register = () => {
                     className="text-red-500 text-sm"
                   />
 
-                  <Field
-                    name="password"
-                    type="password"
-                    placeholder="Contraseña"
-                    className="w-full p-2 bg-[#1c1d2b] text-white border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-purple-700"
-                  />
+                  {/* Password con ojito */}
+                  <div className="relative">
+                    <Field
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Contraseña"
+                      className="w-full p-2 pr-10 bg-[#1c1d2b] text-white border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-purple-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((p) => !p)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                   <ErrorMessage
                     name="password"
                     component="div"
                     className="text-red-500 text-sm"
                   />
 
-                  <Field
-                    name="confirmPassword"
-                    type="password"
-                    placeholder="Confirmar contraseña"
-                    className="w-full p-2 bg-[#1c1d2b] text-white border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-purple-700"
-                  />
+                  {/* Confirm Password con ojito */}
+                  <div className="relative">
+                    <Field
+                      name="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Confirmar contraseña"
+                      className="w-full p-2 pr-10 bg-[#1c1d2b] text-white border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-purple-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((p) => !p)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff size={18} />
+                      ) : (
+                        <Eye size={18} />
+                      )}
+                    </button>
+                  </div>
                   <ErrorMessage
                     name="confirmPassword"
                     component="div"
