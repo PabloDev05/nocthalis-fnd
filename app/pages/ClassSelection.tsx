@@ -47,11 +47,11 @@ const ClassSelection = () => {
 
   const handleClassSelect = (cls: GameClass) => {
     console.log("Seleccionada:", cls);
-    localStorage.setItem("selectedClassId", cls.id); // ← para backend
-    localStorage.setItem("selectedClassName", cls.name); // ← para mostrar
-    localStorage.setItem("selectedClassImage", cls.imageMainClassUrl); // ← para mostrar
-    localStorage.setItem("selectedClassDescription", cls.description); // ← nuevo
-    localStorage.setItem("selectedClassJSON", JSON.stringify(cls)); // ← útil para futuras pantallas
+    localStorage.setItem("selectedClassId", cls.id);
+    localStorage.setItem("selectedClassName", cls.name);
+    localStorage.setItem("selectedClassImage", cls.imageMainClassUrl);
+    localStorage.setItem("selectedClassDescription", cls.description);
+    localStorage.setItem("selectedClassJSON", JSON.stringify(cls));
     localStorage.setItem("classChosen", "true");
     navigate("/register");
   };
@@ -77,7 +77,11 @@ const ClassSelection = () => {
         Cuatro caminos. Una guerra eterna. Elige con sabiduría...
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl w-full">
+      {/* Opción 1 (recomendada): fuerza 5 columnas en xl+ y agranda el contenedor */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-8 max-w-screen-2xl w-full mx-auto">
+        {/* Opción 2 (fluida): reemplazá la línea de arriba por esta:
+        <div className="grid gap-8 w-full mx-auto [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] max-w-screen-2xl">
+        */}
         {classes.map((cls) => (
           <div
             key={cls.id}
@@ -88,7 +92,9 @@ const ClassSelection = () => {
             className="relative group cursor-pointer rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition duration-300 border border-gray-800 bg-cover bg-center outline-none focus:ring-2 focus:ring-purple-700"
             style={{
               backgroundImage: `url(${cls.imageMainClassUrl})`,
-              height: "460px",
+              height: "500px",
+              padding: "0",
+              width: "300px",
             }}
           >
             {/* Overlay oscuro para contraste */}
@@ -97,12 +103,12 @@ const ClassSelection = () => {
             {/* Contenido centrado */}
             <div className="relative z-10 flex flex-col justify-end h-full p-6 text-center">
               <h2 className="text-2xl font-bold font-serif mb-2">{cls.name}</h2>
-              <p className="text-gray-400 text-sm mt-2 max-w-xs text-center">
+              <p className="text-gray-400 text-sm mt-2 max-w-xs text-center mx-auto">
                 {cls.description}
               </p>
               <button
                 type="button"
-                className="w-full py-2 bg-gray-900/80 hover:bg-gray-800 text-white font-semibold rounded transition duration-300"
+                className="mt-3 w-full py-2 bg-gray-900/80 hover:bg-gray-800 text-white font-semibold rounded transition duration-300"
               >
                 Elegir {cls.name}
               </button>

@@ -1,9 +1,13 @@
 // app/types/character.ts
+
+/* ───────────── Equipo ───────────── */
 export type EquipmentSlot = "helmet" | "chest" | "gloves" | "boots" | "mainWeapon" | "offWeapon" | "ring" | "belt" | "amulet";
 
 export type Equipment = Record<EquipmentSlot, string | null>;
 
-/** Stats base del personaje (tal como las manejas en el proyecto) */
+/* ───────────── Stats base (BaseStats) ─────────────
+   Debe coincidir con lo que usa allocation.service y el seed.
+*/
 export interface Stats {
   strength: number;
   dexterity: number;
@@ -12,11 +16,11 @@ export interface Stats {
   physicalDefense: number;
   magicalDefense: number;
   luck: number;
-  agility: number;
   endurance: number;
-  wisdom: number;
+  fate: number; // 👈 agregado (requerido por pasivas y proc scaling)
 }
 
+/* ───────────── Resistencias ───────────── */
 export interface Resistances {
   fire: number;
   ice: number;
@@ -36,69 +40,121 @@ export interface Resistances {
   criticalDamageReduction: number;
 }
 
+/* ───────────── CombatStats (redondeados para UI) ─────────────
+   Sin MP ni manaSteal (no vienen en tu payload actual).
+*/
 export interface CombatStats {
   maxHP: number;
-  maxMP: number;
   attackPower: number;
   magicPower: number;
-  criticalChance: number; // puede venir como porcentaje (12.9) en tu API
-  criticalDamageBonus: number; // idem (ej: 41.4)
+  criticalChance: number;
+  criticalDamageBonus: number;
   attackSpeed: number;
-  evasion: number; // idem (8, 12.9, etc.)
-  blockChance: number; // idem
+  evasion: number;
+  blockChance: number;
   blockValue: number;
   lifeSteal: number;
-  manaSteal: number;
-  damageReduction: number; // idem
+  damageReduction: number;
   movementSpeed: number;
 }
 
-/** Forma compacta de la pasiva por defecto de la clase */
-export interface PassiveDefault {
-  name: string; // p.ej. "Sombra Letal"
-  description: string; // texto completo
-  short?: string; // opcional: resumen corto para el badge (p.ej. "+30% daño crítico")
+/* ───────────── Skills de clase ───────────── */
+export interface PassiveDefaultSkill {
+  enabled?: boolean;
+  name?: string;
+  damageType?: string;
+  shortDescEn?: string;
+  longDescEn?: string;
+  trigger?: Record<string, any>;
+  durationTurns?: number;
+  bonusDamage?: number;
+  extraEffects?: Record<string, number>;
 }
 
+export interface UltimateSkill {
+  enabled?: boolean;
+  name?: string;
+  description?: string;
+  cooldownTurns?: number;
+  effects?: Record<string, any>;
+  proc?: {
+    enabled?: boolean;
+    respectCooldown?: boolean;
+    procInfoEn?: string;
+    trigger?: Record<string, any>;
+  };
+}
+
+/* ───────────── Clase y subclases ───────────── */
+export interface SubclassDTO {
+  id: string;
+  name: string;
+  iconName: string;
+  imageSubclassUrl?: string;
+  slug?: string | null;
+}
+
+export interface ClassMetaDTO {
+  id: string;
+  name: string;
+  iconName: string;
+  imageMainClassUrl: string;
+
+  primaryWeapons: string[];
+  secondaryWeapons: string[];
+  defaultWeapon: string;
+  allowedWeapons: string[];
+
+  passiveDefaultSkill?: PassiveDefaultSkill | null;
+  passiveDefault?: PassiveDefaultSkill | null; // por compat
+  ultimateSkill?: UltimateSkill | null;
+
+  subclasses: SubclassDTO[];
+}
+
+/* ───────────── Stamina snapshot ───────────── */
+export interface StaminaSnapshot {
+  stamina: number;
+  staminaMax: number;
+  usedRate: number;
+  updatedAt: string;
+  etaFullAt: string | null;
+}
+
+/* ───────────── Character API principal ─────────────
+   Alineado con CharacterResponseDTO del controller.
+*/
 export interface CharacterApi {
   id: string;
   userId: string; // ObjectId string
-  classId: string; // ObjectId string
-  subclassId?: string | null;
+  username: string; // viene del populate en /character/me
 
-  name: string;
+  class: ClassMetaDTO;
+  selectedSubclass: SubclassDTO | null;
+
   level: number;
   experience: number;
-
-  /** puntos por asignar (aparece el botón "+") */
-  availablePoints?: number;
-
-  /** HP actual (si el backend lo envía; útil para UI sin suposiciones) */
-  currentHP?: number;
 
   stats: Stats;
   resistances: Resistances;
   combatStats: CombatStats;
 
-  passivesUnlocked: string[];
-  inventory: string[];
   equipment: Equipment;
+  inventory: string[];
 
-  /** Nombre de la clase si lo envías plano */
+  createdAt: string; // ISO
+  updatedAt: string; // ISO
+
+  // Extras útiles para la UI
+  availablePoints?: number;
+  stamina: StaminaSnapshot;
+
+  // Fallbacks / compat opcionales
   className?: string;
+  passivesUnlocked?: string[];
 
-  /**
-   * Info completa de clase (opcional). Útil para mostrar la pasiva por defecto
-   * sin hacer otra llamada (Arena/Game).
-   */
-  class?: {
-    name: string;
-    passiveDefault?: PassiveDefault | null;
-  } | null;
-
-  /**
-   * Atajo opcional si prefieres mandarlo directo en la raíz.
-   * (El UI usará class?.passiveDefault ?? passiveDefault si existe)
-   */
-  passiveDefault?: PassiveDefault | null;
+  // Atajos opcionales en raíz (la UI los usa si están)
+  passiveDefaultSkill?: PassiveDefaultSkill | null;
+  passiveDefault?: PassiveDefaultSkill | null;
+  ultimateSkill?: UltimateSkill | null;
 }
