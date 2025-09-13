@@ -1,4 +1,3 @@
-// src/context/AuthContext.tsx
 import {
   createContext,
   useContext,
@@ -16,6 +15,11 @@ type AuthContextType = {
   classChosen: boolean;
   characterClassName: string | null;
   characterClassId: string | null;
+  /** Stamina centralizada (se actualiza desde backend en cada pantalla) */
+  staminaCurrent: number;
+  staminaMax: number;
+  setStamina: (current: number, max: number) => void;
+
   isAuthenticated: boolean;
   authLoading: boolean;
   login: (
@@ -47,16 +51,12 @@ type JwtPayload = {
   iat?: number;
 };
 
-/** base64url -> base64 -> string */
 function b64urlDecode(input: string): string {
-  // Reemplazo URL-safe
   let str = input.replace(/-/g, "+").replace(/_/g, "/");
-  // Padding
   const pad = str.length % 4;
   if (pad === 2) str += "==";
   else if (pad === 3) str += "=";
   else if (pad !== 0) {
-    // padding raro: mejor fallar seguro
     throw new Error("Invalid base64url padding");
   }
   return atob(str);
@@ -74,12 +74,10 @@ function decodeJwt(token: string | null): JwtPayload | null {
   }
 }
 
-/** margen para evitar “expira justo ahora” (en ms) */
 const EXP_SKEW_MS = 5_000;
-
 function isExpired(token: string | null): boolean {
   const p = decodeJwt(token);
-  if (!p?.exp) return false; // si no hay exp, no forzamos logout
+  if (!p?.exp) return false;
   return Date.now() >= p.exp * 1000 - EXP_SKEW_MS;
 }
 
@@ -95,10 +93,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
   const [characterClassId, setCharacterClassId] = useState<string | null>(null);
 
-  // Para limpiar el timeout de auto-logout
+  // Stamina (centralizada en memoria, no se persiste en LS)
+  const [staminaCurrent, _setStaminaCurrent] = useState<number>(0);
+  const [staminaMax, _setStaminaMax] = useState<number>(10);
+  const setStamina = (current: number, max: number) => {
+    _setStaminaCurrent(Math.max(0, current | 0));
+    _setStaminaMax(Math.max(1, max | 0));
+  };
+
   const logoutTimerRef = useRef<number | null>(null);
 
-  /** Programa un logout exacto cuando venza el token */
   const scheduleAutoLogout = (tok: string | null) => {
     if (logoutTimerRef.current) {
       clearTimeout(logoutTimerRef.current);
@@ -113,13 +117,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  /** Limpia todo el estado + LS */
   const hardClear = () => {
     setToken(null);
     setUser(null);
     setClassChosen(false);
     setCharacterClassName(null);
     setCharacterClassId(null);
+
+    _setStaminaCurrent(0);
+    _setStaminaMax(10);
 
     localStorage.removeItem(LS.token);
     localStorage.removeItem(LS.user);
@@ -133,7 +139,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  /** Bootstrap: lee de LS, valida expiración y sincroniza estado */
   useEffect(() => {
     const storedToken = localStorage.getItem(LS.token);
     const storedUser = localStorage.getItem(LS.user);
@@ -149,7 +154,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setCharacterClassId(storedClassId || null);
       scheduleAutoLogout(storedToken);
     } else {
-      // vencido o inconsistente → limpiar
       hardClear();
     }
 
@@ -160,7 +164,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Sync entre pestañas (LocalStorage) */
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.storageArea !== localStorage) return;
@@ -185,7 +188,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Al volver el foco, si el token venció, desloguea */
   useEffect(() => {
     const onFocus = () => {
       if (isExpired(localStorage.getItem(LS.token))) {
@@ -196,7 +198,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
-  /** API: login/logout */
   const login = (
     newToken: string,
     newUser: string,
@@ -239,6 +240,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         classChosen,
         characterClassName,
         characterClassId,
+        staminaCurrent,
+        staminaMax,
+        setStamina,
         authLoading,
         isAuthenticated,
         login,

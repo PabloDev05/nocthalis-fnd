@@ -21,24 +21,23 @@ import {
   BellRingIcon as Ring,
   Info,
   Flame,
-  Trophy,
-  Star,
-  FlaskConical as Flask,
-  BarChart2,
   ShieldPlus,
+  BarChart2,
 } from "lucide-react";
 import type { CharacterApi, EquipmentSlot, Stats } from "../../types/character";
 
+/* ─────────────────────────────────────────────────────────── */
+/* Config & constants                                          */
+/* ─────────────────────────────────────────────────────────── */
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3030/api";
 
 /* ─────────────────────────────────────────────────────────── */
-/* Tipos utilitarios                                            */
-/* ─────────────────────────────────────────────────────────── */
-type CombatKey = keyof NonNullable<CharacterApi["combatStats"]> | "skillProc";
+type NativeCombatKey = keyof NonNullable<CharacterApi["combatStats"]>;
+type ExtraUiKey = "skillProc" | "damageRange";
+type CombatKey = NativeCombatKey | ExtraUiKey;
 
 /* ─────────────────────────────────────────────────────────── */
-/* Orders & labels                                             */
-/* ─────────────────────────────────────────────────────────── */
+/** Resistencias visibles (CCR/CDR se muestran en Combat Metrics) */
 const ORDERED_RESIST: (keyof CharacterApi["resistances"])[] = [
   "fire",
   "ice",
@@ -54,8 +53,12 @@ const ORDERED_RESIST: (keyof CharacterApi["resistances"])[] = [
   "bleed",
   "curse",
   "knockback",
-  "criticalChanceReduction",
-  "criticalDamageReduction",
+];
+
+/** Combat Metrics sin Damage Reduction (esa va a la columna Attributes) */
+const COMBAT_METRICS_KEYS: ReadonlyArray<NativeCombatKey> = [
+  "maxHP",
+  "attackSpeed",
 ];
 
 const COMBAT_HINTS: Partial<Record<CombatKey, string>> = {
@@ -65,13 +68,19 @@ const COMBAT_HINTS: Partial<Record<CombatKey, string>> = {
   evasion: "Percent chance to dodge incoming attacks.",
   attackSpeed: "Percent faster attack cadence.",
   blockChance: "Percent chance to block incoming damage.",
-  damageReduction: "Percent mitigation to incoming damage.",
   criticalChance: "Percent chance to land a critical strike.",
   blockValue: "Damage absorbed on a successful block.",
   lifeSteal: "Heals based on damage dealt.",
   movementSpeed: "How fast you move.",
   skillProc: "Chance to auto-cast passives or the ultimate (scales with Fate).",
+  damageRange: "Damage min/max provided by backend.",
 };
+const RESIST_HINTS = {
+  criticalChanceReduction:
+    "Reduces incoming attackers' critical chance by this value (percentage points).",
+  criticalDamageReduction:
+    "Reduces incoming critical damage multiplier additively (percentage points).",
+} as const;
 const getHint = (k: CombatKey) => COMBAT_HINTS[k] ?? "";
 
 const NAV_ITEMS = [
@@ -97,12 +106,40 @@ type ProgressionApi = {
   canAllocateNow?: boolean;
 };
 
+/* ─────────────────────────────────────────────────────────── */
 function labelize(key: string) {
   return key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
 }
+function asInt(raw: number | undefined) {
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
 
-/* ─────────────────────────────────────────────────────────── */
-/* Tooltip (compact)                                           */
+/** usar clave primaria enviada por backend */
+function pickPrimaryPower(data?: CharacterApi | null): {
+  key: "attackPower" | "magicPower";
+  label: string;
+} {
+  const k = (data as any)?.primaryPowerKey;
+  if (k === "magicPower") return { key: "magicPower", label: "Magic Power" };
+  return { key: "attackPower", label: "Attack Power" };
+}
+
+/** damage range únicamente desde backend */
+function readDamageRange(data?: CharacterApi | null): [number, number] | null {
+  const mn = (data as any)?.uiDamageMin;
+  const mx = (data as any)?.uiDamageMax;
+  if (
+    Number.isFinite(mn) &&
+    Number.isFinite(mx) &&
+    (mn as number) > 0 &&
+    (mx as number) >= (mn as number)
+  ) {
+    return [Math.floor(mn as number), Math.floor(mx as number)];
+  }
+  return null; // si no viene del backend, mostramos "—"
+}
+
 /* ─────────────────────────────────────────────────────────── */
 function Tooltip({
   text,
@@ -130,8 +167,6 @@ function Tooltip({
 }
 
 /* ─────────────────────────────────────────────────────────── */
-/* Equipment slot                                              */
-/* ─────────────────────────────────────────────────────────── */
 const EquipmentSlotView = ({
   slot,
   icon: Icon,
@@ -152,10 +187,7 @@ const EquipmentSlotView = ({
 );
 
 /* ─────────────────────────────────────────────────────────── */
-function asInt(raw: number | undefined) {
-  const n = Number(raw);
-  return Number.isFinite(n) ? Math.round(n) : 0;
-}
+/** Glow util: genera “destellos” cuando cambian números */
 function useGlowOnChange(obj?: Record<string, number | undefined> | null) {
   const prevRef = useRef<Record<string, number | undefined> | null>(null);
   const [glow, setGlow] = useState<Record<string, number>>({});
@@ -177,7 +209,7 @@ function useGlowOnChange(obj?: Record<string, number | undefined> | null) {
     }
     if (changed.length) {
       setGlow((g) => {
-        const n = { ...g };
+        const n: Record<string, number> = { ...g };
         const ts = Date.now();
         changed.forEach((k) => (n[k] = ts));
         return n;
@@ -204,122 +236,69 @@ const asIndexable = (cs: CharacterApi["combatStats"] | null | undefined) =>
   > | null;
 
 /* ─────────────────────────────────────────────────────────── */
-/* Primary power & class                                       */
+/* Stamina helpers                                             */
 /* ─────────────────────────────────────────────────────────── */
-function isMagicClass(name: string) {
-  return /necromancer|exorcist|mage|wizard|sorcer/i.test(name);
-}
-function pickPrimaryPower(data?: CharacterApi | null): {
-  key: "attackPower" | "magicPower";
-  label: string;
-  isMage: boolean;
-} {
-  const name =
-    ((data as any)?.class?.name as string | undefined)?.toLowerCase() ??
-    (data?.className ?? "").toLowerCase();
-  const mageByName = isMagicClass(name);
-  if (!data?.combatStats)
-    return {
-      key: mageByName ? "magicPower" : "attackPower",
-      label: mageByName ? "Magic Power" : "Attack Power",
-      isMage: mageByName,
-    };
-  const { attackPower = 0, magicPower = 0 } = data.combatStats;
-  if (mageByName || magicPower > attackPower)
-    return { key: "magicPower", label: "Magic Power", isMage: true };
-  return { key: "attackPower", label: "Attack Power", isMage: false };
+type StaminaSnap = { current: number; max: number };
+function extractStamina(obj: any): StaminaSnap {
+  if (!obj || typeof obj !== "object") return { current: 0, max: 10 };
+  const n = (v: any) => asInt(v);
+  const current = n(
+    obj.current ??
+      obj.value ??
+      obj.stamina ??
+      obj.energy ??
+      obj?.snapshot?.current ??
+      0
+  );
+  const max =
+    n(
+      obj.max ??
+        obj.maxValue ??
+        obj.staminaMax ??
+        obj.energyMax ??
+        obj.capacity ??
+        obj?.snapshot?.max ??
+        10
+    ) || 10;
+  return { current: Math.max(0, current), max: Math.max(1, max) };
 }
 
 /* ─────────────────────────────────────────────────────────── */
-/* Skills extractors + tooltips                                */
+/* Barra de Stamina                                            */
 /* ─────────────────────────────────────────────────────────── */
-type SimplePassive = {
-  enabled?: boolean;
-  name?: string;
-  shortDescEn?: string;
-  longDescEn?: string;
-  durationTurns?: number;
-  trigger?: {
-    check?: string;
-    baseChancePercent?: number;
-    fateScalePerPoint?: number;
-    maxChancePercent?: number;
-  };
-};
-type SimpleUltimate = {
-  enabled?: boolean;
-  name?: string;
-  description?: string;
-  cooldownTurns?: number;
-  proc?: {
-    enabled?: boolean;
-    procInfoEn?: string;
-    respectCooldown?: boolean;
-    trigger?: {
-      check?: string;
-      baseChancePercent?: number;
-      fateScalePerPoint?: number;
-      maxChancePercent?: number;
-    };
-  };
-};
-function pickCorePassive(data?: any): SimplePassive | null {
-  const p =
-    data?.passiveDefaultSkill ??
-    data?.passiveDefault ??
-    data?.class?.passiveDefaultSkill ??
-    data?.class?.passiveDefault ??
-    null;
-  if (!p || p.enabled === false) return null;
-  return p;
-}
-function pickUltimate(data?: any): SimpleUltimate | null {
-  const u = data?.ultimateSkill ?? data?.class?.ultimateSkill ?? null;
-  if (!u || u.enabled === false) return null;
-  return u;
-}
-function passiveTooltip(p: SimplePassive): string {
-  const parts: string[] = [];
-  if (p.longDescEn) parts.push(p.longDescEn);
-  if (p.durationTurns != null) parts.push(`Duration: ${p.durationTurns} turns`);
-  if (p.trigger?.check) {
-    const { baseChancePercent, fateScalePerPoint, maxChancePercent } =
-      p.trigger ?? {};
-    const chance =
-      baseChancePercent != null ||
-      fateScalePerPoint != null ||
-      maxChancePercent != null
-        ? `Chance = min(${baseChancePercent ?? 0}% + Fate×${
-            fateScalePerPoint ?? 0
-          }, ${maxChancePercent ?? "cap"}%)`
-        : "";
-    parts.push(
-      `Trigger: ${labelize(p.trigger?.check ?? "")}${
-        chance ? ` · ${chance}` : ""
-      }`
-    );
-  }
-  return parts.join("\n");
-}
-function ultimateTooltip(u: SimpleUltimate): string {
-  const parts: string[] = [];
-  if (u.description) parts.push(u.description);
-  if (u.cooldownTurns != null) parts.push(`Cooldown: ${u.cooldownTurns} turns`);
-  if (u.proc?.enabled) {
-    const t = u.proc.trigger;
-    const chance =
-      t?.baseChancePercent != null ||
-      t?.fateScalePerPoint != null ||
-      t?.maxChancePercent != null
-        ? `Chance = min(${t?.baseChancePercent ?? 0}% + Fate×${
-            t?.fateScalePerPoint ?? 0
-          }, ${t?.maxChancePercent ?? "cap"}%)`
-        : "";
-    parts.push(
-      `Autocast: ${u.proc.procInfoEn ?? "—"}${chance ? `\n${chance}` : ""}`
-    );
-  }
-  return parts.join("\n");
+function BigStaminaBar({ current, max }: { current: number; max: number }) {
+  const pct = Math.max(
+    0,
+    Math.min(100, Math.round((current / Math.max(1, max)) * 100))
+  );
+  return (
+    <div
+      className="fixed left-1/2 -translate-x-1/2 bottom-3 z-[60] w-[min(92vw,560px)]
+                 rounded-lg border border-[rgba(90,110,160,.28)]
+                 bg-[linear-gradient(180deg,rgba(12,14,20,.92),rgba(8,10,16,.95))]
+                 shadow-[0_8px_22px_rgba(0,0,0,.55),0_0_14px_rgba(100,120,180,.16),inset_0_1px_0_rgba(255,255,255,.04)]"
+    >
+      <div className="px-2.5 py-1.5 flex items-center gap-2.5">
+        <div className="inline-flex w-7 h-7 items-center justify-center rounded-md bg-[rgba(100,120,180,.12)] border border-[rgba(90,110,160,.28)]">
+          <Zap className="w-4 h-4 text-[var(--accent)]" />
+        </div>
+        <div className="flex-1 h-3 rounded border border-[rgba(90,110,160,.28)] relative overflow-hidden bg-[rgba(24,28,40,.55)]">
+          <div
+            className="absolute inset-y-0 left-0
+                       bg-gradient-to-r from-[#1f2a44] via-[#273352] to-[#2f3b63]
+                       shadow-[0_0_8px_rgba(100,120,180,.28)]
+                       transition-[width] duration-600 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-zinc-200/90 text-[10px] font-semibold tracking-wide tabular-nums">
+              {asInt(current)} / {asInt(max)} STAMINA
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -327,7 +306,14 @@ function ultimateTooltip(u: SimpleUltimate): string {
 export default function GameInterface() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { token, user: userFromCtx, logout } = useAuth();
+  const {
+    token,
+    user: userFromCtx,
+    logout,
+    setStamina,
+    staminaCurrent,
+    staminaMax,
+  } = useAuth();
 
   const [data, setData] = useState<CharacterApi | null>(null);
   const [progression, setProgression] = useState<ProgressionApi | null>(null);
@@ -351,40 +337,81 @@ export default function GameInterface() {
     return instance;
   }, [token]);
 
+  // Stamina: sincroniza igual que Arena
+  async function syncStamina() {
+    try {
+      const { data: st } = await client.get("/stamina");
+      const snap = extractStamina(st);
+      setStamina(snap.current, snap.max);
+    } catch {
+      const guess = extractStamina({
+        current:
+          (data as any)?.stamina ??
+          (data as any)?.energy ??
+          (data as any)?.combatStats?.stamina,
+        max:
+          (data as any)?.staminaMax ??
+          (data as any)?.combatStats?.staminaMax ??
+          10,
+      });
+      setStamina(guess.current, guess.max);
+    }
+  }
+
   useEffect(() => {
     let mounted = true;
     setLoading(true);
     setError(null);
 
-    Promise.all([
-      client.get<CharacterApi>("/character/me"),
-      client.get<ProgressionApi>("/character/progression"),
-    ])
-      .then(([meRes, progRes]) => {
+    (async () => {
+      try {
+        const [meRes, progRes] = await Promise.all([
+          client.get<CharacterApi>("/character/me"),
+          client.get<ProgressionApi>("/character/progression"),
+        ]);
         if (!mounted) return;
         setData(meRes.data);
         setProgression(progRes.data);
-      })
-      .catch((err) => {
+        await syncStamina();
+      } catch (err: any) {
         if (!mounted) return;
         setError(
           err?.response?.data?.message ||
             err.message ||
             "Error fetching character"
         );
-      })
-      .finally(() => mounted && setLoading(false));
+        await syncStamina();
+      } finally {
+        mounted && setLoading(false);
+      }
+    })();
 
     return () => {
       mounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
 
-  const combatForGlow = useMemo(
-    () => asIndexable(data?.combatStats),
-    [data?.combatStats]
+  /* ── Glows ── */
+  const glowCombat = useGlowOnChange(
+    useMemo(() => asIndexable(data?.combatStats), [data?.combatStats])
   );
-  const glow = useGlowOnChange(combatForGlow);
+  const glowStats = useGlowOnChange(
+    useMemo(
+      () =>
+        (data?.stats
+          ? (data.stats as unknown as Record<string, number | undefined>)
+          : null) as Record<string, number | undefined> | null,
+      [data?.stats]
+    )
+  );
+  const damageObj = useMemo(() => {
+    const r = readDamageRange(data);
+    return r
+      ? ({ damageRange: r[0] * 1000 + r[1] } as Record<string, number>)
+      : null;
+  }, [(data as any)?.uiDamageMin, (data as any)?.uiDamageMax]);
+  const glowDamage = useGlowOnChange(damageObj);
 
   const availablePoints = asInt((data as any)?.availablePoints);
   const xpSince = asInt(progression?.xpSinceLevel);
@@ -406,6 +433,7 @@ export default function GameInterface() {
       setData(me.data);
       setProgression(prog.data);
       setError(null);
+      await syncStamina();
     } catch (e: any) {
       setError(
         e?.response?.data?.message || e?.message || "Error allocating points"
@@ -421,16 +449,10 @@ export default function GameInterface() {
     navigate("/login", { replace: true });
   };
 
-  // progression
   const lvl = progression?.level ?? (data as any)?.level ?? "—";
   const pct100 = Math.max(0, Math.min(100, asInt(progression?.xpPercent ?? 0)));
 
-  // class/user
-  const clazz = (data as any)?.class as
-    | { name?: string; description?: string }
-    | undefined;
-  const className = clazz?.name ?? (data as any)?.className ?? "—";
-
+  const className = data?.class?.name ?? (data as any)?.className ?? "—";
   const ctxName =
     typeof userFromCtx === "string"
       ? userFromCtx
@@ -438,12 +460,12 @@ export default function GameInterface() {
   const displayName =
     (data as any)?.username ?? ctxName ?? (data as any)?.name ?? "—";
 
-  const p = pickPrimaryPower(data);
-  const showMagic = isMagicClass((className ?? "").toLowerCase());
+  const primary = pickPrimaryPower(data);
 
-  // stats list (always 6 rows)
+  /** Mostramos SIEMPRE todos los atributos (no desaparecen más) */
   const STATS_KEYS: (keyof CharacterApi["stats"])[] = [
-    p.isMage ? "intelligence" : "strength",
+    "strength",
+    "intelligence",
     "dexterity",
     "vitality",
     "endurance",
@@ -451,23 +473,26 @@ export default function GameInterface() {
     "fate",
   ];
 
-  // skills
-  const corePassive = pickCorePassive(data);
-  const ultimate = pickUltimate(data);
+  const corePassive =
+    data && (data as any).passiveDefaultSkill
+      ? (data as any).passiveDefaultSkill
+      : ((data as any)?.class?.passiveDefaultSkill ?? null);
+  const ultimate =
+    data && (data as any).ultimateSkill
+      ? (data as any).ultimateSkill
+      : ((data as any)?.class?.ultimateSkill ?? null);
 
-  // mapping: Character Stat → Combat
   function mapStatToCombatKeys(stat: keyof CharacterApi["stats"]): CombatKey[] {
     switch (stat) {
       case "strength":
-        return ["attackPower"];
       case "intelligence":
-        return showMagic ? ["magicPower"] : [];
+        return ["damageRange"]; // brillo con glowDamage
       case "dexterity":
-        return ["evasion"]; // Attack Speed queda en Metrics
+        return [primary.key]; // “Attack” sigue la primaria real
       case "vitality":
-        return ["blockChance"]; // Max HP en Metrics
+        return ["blockChance"];
       case "endurance":
-        return ["damageReduction"];
+        return ["damageReduction"]; // sólo en Attributes (no en Combat Metrics)
       case "luck":
         return ["criticalChance"];
       case "fate":
@@ -481,8 +506,12 @@ export default function GameInterface() {
   function prettyCombatLabel(rk: CombatKey) {
     if (rk === "skillProc") return "Auto Cast";
     if (rk === "maxHP") return "Max HP";
+    if (rk === "damageRange") return "Damage";
+    if (rk === primary.key) return "Attack";
     return labelize(String(rk));
   }
+
+  const damageRange = readDamageRange(data);
 
   return (
     <div className="min-h-screen text-sm leading-tight bg-[var(--bg)] text-[13px]">
@@ -523,8 +552,8 @@ export default function GameInterface() {
           </nav>
         </header>
 
-        {/* Layout: sidebar / main-left / main-right */}
-        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-3 xl:gap-4 pb-4">
+        {/* Layout */}
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-3 xl:gap-4 pb-24">
           {/* Sidebar */}
           <aside className="lg:col-span-2 dark-panel p-2 space-y-1 rounded-lg shadow-lg border border-[var(--border)]">
             {[
@@ -628,7 +657,6 @@ export default function GameInterface() {
                     <Flame className="w-4 h-4 mr-2 text-accent" /> Class Skills
                   </h3>
 
-                  {/* Passive (sin tooltip al final) */}
                   {corePassive ? (
                     <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-2.5">
                       <div className="flex items-start gap-2.5">
@@ -653,7 +681,6 @@ export default function GameInterface() {
                     </div>
                   )}
 
-                  {/* Ultimate (sin tooltip al final) */}
                   {ultimate ? (
                     <div className="rounded-lg border border-[var(--accent-weak)] bg-[var(--panel-2)] p-3">
                       <div className="flex items-start gap-2.5">
@@ -668,7 +695,10 @@ export default function GameInterface() {
                             </span>
                           </div>
                           <div className="text-[11px] text-gray-300 mt-0.5 whitespace-pre-wrap">
-                            {(ultimate.description ?? "—").trim()}
+                            {(ultimate.description ?? "—")
+                              .trim()
+                              .toString()
+                              .slice(0, 600)}
                           </div>
                         </div>
                       </div>
@@ -683,6 +713,7 @@ export default function GameInterface() {
 
               {/* Resistances & Combat Metrics */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 auto-rows-fr">
+                {/* Resistances */}
                 <div className="dark-panel p-3 h-full">
                   <h3 className="text-white font-semibold mb-3 text-sm flex items-center">
                     <ShieldPlus className="w-4 h-4 mr-2 text-accent" />
@@ -705,24 +736,14 @@ export default function GameInterface() {
                   </div>
                 </div>
 
+                {/* Combat Metrics */}
                 <div className="dark-panel p-3 h-full">
                   <h3 className="text-white font-semibold mb-3 text-sm flex items-center">
                     <BarChart2 className="w-4 h-4 mr-2 text-accent" />
                     Combat Metrics
                   </h3>
                   <div className="grid grid-cols-2 gap-2.5">
-                    {(
-                      [
-                        "maxHP",
-                        "attackPower",
-                        ...(showMagic ? (["magicPower"] as const) : []),
-                        "evasion",
-                        "attackSpeed",
-                        "blockChance",
-                        "damageReduction",
-                        "criticalChance",
-                      ] as const
-                    ).map((k) => (
+                    {COMBAT_METRICS_KEYS.map((k) => (
                       <div
                         key={k}
                         className="flex justify-between items-center"
@@ -733,12 +754,14 @@ export default function GameInterface() {
                           </span>
                         </Tooltip>
                         <span
-                          className={`text-accent font-bold text-xs ${glow[k as string] ? "stat-glow" : ""}`}
+                          className={`text-accent font-bold text-xs ${glowCombat[k as string] ? "stat-glow" : ""}`}
                         >
                           {asInt((data?.combatStats as any)?.[k] ?? 0)}
                         </span>
                       </div>
                     ))}
+
+                    {/* Base defenses */}
                     <div className="flex justify-between items-center">
                       <span className="text-gray-300 text-xs">
                         Physical Defense
@@ -755,42 +778,32 @@ export default function GameInterface() {
                         {asInt((data as any)?.stats?.magicalDefense)}
                       </span>
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Achievements & Potions */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 auto-rows-fr">
-                <div className="dark-panel p-3 h-full">
-                  <h3 className="stat-text font-semibold mb-3 flex items-center text-sm">
-                    <Trophy className="w-4 h-4 mr-2 text-[var(--accent)]" />{" "}
-                    Achievements
-                  </h3>
-                  <div className="flex gap-2.5">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div
-                        key={i}
-                        className="w-9 h-9 rounded-full border border-[var(--border)] bg-gradient-to-br from-[var(--accent-weak)] to-[var(--accent)]
-                        shadow-[inset_0_0_0_1px_rgba(255,255,255,.015),0_2px_10px_rgba(0,0,0,.35)] flex items-center justify-center"
-                        title="Achievement"
-                      >
-                        <Star className="w-4 h-4 text-[var(--text)]/80" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="dark-panel p-3 h-full">
-                  <h3 className="stat-text font-semibold mb-3 flex items-center text-sm">
-                    <Flask className="w-4 h-4 mr-2 text-green-500" /> Potions
-                  </h3>
-                  <div className="slot-grid-5">
-                    {Array.from({ length: 5 }, (_, i) => (
-                      <div
-                        key={i}
-                        className="equipment-slot slot-fluid flex items-center justify-center"
-                      />
-                    ))}
+                    {/* CCR/CDR */}
+                    <div className="flex justify-between items-center">
+                      <Tooltip text={RESIST_HINTS.criticalChanceReduction}>
+                        <span className="text-gray-300 text-xs">
+                          {labelize("criticalChanceReduction")}
+                        </span>
+                      </Tooltip>
+                      <span className="text-accent font-bold text-xs">
+                        {asInt(
+                          (data as any)?.resistances?.criticalChanceReduction
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <Tooltip text={RESIST_HINTS.criticalDamageReduction}>
+                        <span className="text-gray-300 text-xs">
+                          {labelize("criticalDamageReduction")}
+                        </span>
+                      </Tooltip>
+                      <span className="text-accent font-bold text-xs">
+                        {asInt(
+                          (data as any)?.resistances?.criticalDamageReduction
+                        )}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -798,7 +811,7 @@ export default function GameInterface() {
           </main>
 
           {/* Right column */}
-          <section className="lg:col-span-5 xl:col-span-4 space-y-4">
+          <aside className="lg:col-span-5 xl:col-span-4 space-y-4">
             {/* Avatar / equipment */}
             <div className="dark-panel p-4">
               <div className="flex justify-center mb-6">
@@ -837,7 +850,6 @@ export default function GameInterface() {
                       <div className="w-32 md:w-36 text-center text-base text-accent font-bold px-3 py-1 bg-[var(--panel-2)] border border-[var(--border)]">
                         {displayName}
                       </div>
-
                       <div className="w-32 md:w-36 h-40 md:h-44 bg-[var(--panel-2)] shadow-inner flex items-center justify-center border-x border-[var(--border)]">
                         <User className="w-16 h-16 text-gray-300" />
                       </div>
@@ -899,18 +911,14 @@ export default function GameInterface() {
               </div>
 
               {/* Inventory */}
-              <div className="border-t border-[var(--border)] pt-4 mt-1">
+              <div className="mt-1 pt-4 border-t border-[var(--border)]">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white font-semibold flex items-center text-sm">
-                    <Backpack className="w-4 h-4 mr-2 text-gray-400" />{" "}
+                    <Backpack className="w-4 h-4 mr-2 text-gray-400" />
                     Inventory
                   </h3>
-                  <div className="text-[11px] text-gray-400">
-                    <span className="text-accent">—</span>/—
-                  </div>
                 </div>
 
-                {/* Bigger 5 slots, no overflow */}
                 <div className="slot-grid-5">
                   {Array.from({ length: 5 }, (_, i) => (
                     <div
@@ -942,6 +950,8 @@ export default function GameInterface() {
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                   {STATS_KEYS.map((statKey) => {
                     const rightKeys = mapStatToCombatKeys(statKey);
+                    const statVal = asInt((data as any)?.stats?.[statKey]);
+                    const statGlow = glowStats[String(statKey)];
                     return (
                       <div key={String(statKey)} className="contents">
                         {/* Left cell */}
@@ -950,8 +960,12 @@ export default function GameInterface() {
                             {labelize(String(statKey))}
                           </span>
                           <div className="flex items-center gap-2">
-                            <span className="text-white font-bold">
-                              {asInt((data as any)?.stats?.[statKey])}
+                            <span
+                              className={`text-white font-bold ${
+                                statGlow ? "stat-glow" : ""
+                              }`}
+                            >
+                              {statVal}
                             </span>
                             {canAllocateStrict && (
                               <button
@@ -975,13 +989,23 @@ export default function GameInterface() {
                             <span className="text-gray-500 text-xs">—</span>
                           ) : (
                             rightKeys.map((rk) => {
-                              const value =
-                                rk === "skillProc"
-                                  ? skillProcDisplay
-                                  : asInt(
-                                      (data?.combatStats as any)?.[rk] ?? 0
-                                    );
+                              let value: string | number = "—";
+                              if (rk === "skillProc") {
+                                value = skillProcDisplay;
+                              } else if (rk === "damageRange") {
+                                value = damageRange
+                                  ? `${damageRange[0]} - ${damageRange[1]}`
+                                  : "—";
+                              } else {
+                                value = asInt(
+                                  (data?.combatStats as any)?.[rk] ?? 0
+                                );
+                              }
                               const label = prettyCombatLabel(rk);
+                              const shouldGlow =
+                                rk === "damageRange"
+                                  ? Boolean(glowDamage["damageRange"])
+                                  : Boolean(glowCombat[String(rk)]);
                               return (
                                 <div
                                   key={String(rk)}
@@ -994,9 +1018,7 @@ export default function GameInterface() {
                                   </Tooltip>
                                   <span
                                     className={`text-accent font-bold text-xs ${
-                                      rk !== "skillProc" && glow[String(rk)]
-                                        ? "stat-glow"
-                                        : ""
+                                      shouldGlow ? "stat-glow" : ""
                                     }`}
                                     title={String(value)}
                                   >
@@ -1013,9 +1035,12 @@ export default function GameInterface() {
                 </div>
               </div>
             )}
-          </section>
+          </aside>
         </div>
       </div>
+
+      {/* Barra de Stamina (misma que en Arena) */}
+      <BigStaminaBar current={staminaCurrent ?? 0} max={staminaMax ?? 10} />
     </div>
   );
 }

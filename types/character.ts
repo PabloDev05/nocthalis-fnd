@@ -1,7 +1,14 @@
-// app/types/character.ts
-
 /* ───────────── Equipo ───────────── */
-export type EquipmentSlot = "helmet" | "chest" | "gloves" | "boots" | "mainWeapon" | "offWeapon" | "ring" | "belt" | "amulet";
+export type EquipmentSlot =
+  | "helmet"
+  | "chest"
+  | "gloves"
+  | "boots"
+  | "mainWeapon"
+  | "offWeapon"
+  | "ring"
+  | "belt"
+  | "amulet";
 
 export type Equipment = Record<EquipmentSlot, string | null>;
 
@@ -9,6 +16,7 @@ export type Equipment = Record<EquipmentSlot, string | null>;
    Debe coincidir con lo que usa allocation.service y el seed.
 */
 export interface Stats {
+  [x: string]: number;
   strength: number;
   dexterity: number;
   intelligence: number;
@@ -17,7 +25,7 @@ export interface Stats {
   magicalDefense: number;
   luck: number;
   endurance: number;
-  fate: number; // 👈 agregado (requerido por pasivas y proc scaling)
+  fate: number; // 👈 requerido por pasivas y proc scaling
 }
 
 /* ───────────── Resistencias ───────────── */
@@ -145,6 +153,9 @@ export interface CharacterApi {
   createdAt: string; // ISO
   updatedAt: string; // ISO
 
+  /** URL opcional del retrato del personaje (si el backend lo envía) */
+  avatarUrl?: string | null;
+
   // Extras útiles para la UI
   availablePoints?: number;
   stamina: StaminaSnapshot;
@@ -157,4 +168,12 @@ export interface CharacterApi {
   passiveDefaultSkill?: PassiveDefaultSkill | null;
   passiveDefault?: PassiveDefaultSkill | null;
   ultimateSkill?: UltimateSkill | null;
+
+  /* ──────────── NUEVO: atajos de daño/ataque para la UI ────────────
+     Si el backend los envía, la UI los usa; si no, aplica fallback local.
+  */
+  primaryPowerKey?: "attackPower" | "magicPower"; // qué escalar mostrar como "Attack"
+  primaryPower?: number; // valor directo del poder primario (opcional)
+  uiDamageMin?: number; // daño mínimo visual
+  uiDamageMax?: number; // daño máximo visual
 }
