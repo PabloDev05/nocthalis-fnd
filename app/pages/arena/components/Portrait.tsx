@@ -43,13 +43,21 @@ export function BattlePortrait({
   stats: Record<string, number | undefined>;
   widthClass: string;
 }) {
-  const BLOCK_FX_DURATION = 600; // ms
-  const CRIT_FX_DURATION = 700; // ms
+  // Duraciones de FX (ms)
+  const BLOCK_FX_DURATION = 600;
+  const CRIT_FX_DURATION = 700;
+  const BUMP_FX_DURATION = 380;
+  const HIT_SHAKE_DURATION = 420;
+  const ULT_SHAKE_DURATION = 750;
 
+  // Estados locales para que los FX SIEMPRE terminen y no “queden pintados”
   const [showBlockFx, setShowBlockFx] = useState(false);
   const [showCritFx, setShowCritFx] = useState(false);
+  const [showHitShake, setShowHitShake] = useState(false);
+  const [showUltShake, setShowUltShake] = useState(false);
+  const [showBlockBump, setShowBlockBump] = useState(false);
 
-  // Bloqueo: mostrar FX temporal
+  // BLOQUEO → FX temporal
   useEffect(() => {
     if (blockFlashKey > 0) {
       setShowBlockFx(true);
@@ -61,7 +69,7 @@ export function BattlePortrait({
     }
   }, [blockFlashKey]);
 
-  // Crítico: mostrar FX temporal
+  // CRIT → FX temporal
   useEffect(() => {
     if (hitShakeKey > 0) {
       setShowCritFx(true);
@@ -72,6 +80,42 @@ export function BattlePortrait({
       return () => window.clearTimeout(id);
     }
   }, [hitShakeKey]);
+
+  // HIT SHAKE → temblor corto en impacto
+  useEffect(() => {
+    if (hitShakeKey > 0) {
+      setShowHitShake(true);
+      const id = window.setTimeout(
+        () => setShowHitShake(false),
+        HIT_SHAKE_DURATION
+      );
+      return () => window.clearTimeout(id);
+    }
+  }, [hitShakeKey]);
+
+  // ULT SHAKE → temblor más largo
+  useEffect(() => {
+    if (ultShakeKey > 0) {
+      setShowUltShake(true);
+      const id = window.setTimeout(
+        () => setShowUltShake(false),
+        ULT_SHAKE_DURATION
+      );
+      return () => window.clearTimeout(id);
+    }
+  }, [ultShakeKey]);
+
+  // BLOCK BUMP → bump suave del card
+  useEffect(() => {
+    if (blockBumpKey > 0) {
+      setShowBlockBump(true);
+      const id = window.setTimeout(
+        () => setShowBlockBump(false),
+        BUMP_FX_DURATION
+      );
+      return () => window.clearTimeout(id);
+    }
+  }, [blockBumpKey]);
 
   const pct = Math.max(
     0,
@@ -84,9 +128,9 @@ export function BattlePortrait({
                   bg-gradient-to-b from-[rgba(35,38,55,.96)] to-[rgba(15,16,22,.98)]
                   shadow-[inset_0_1px_0_rgba(255,255,255,.05),0_20px_40px_rgba(0,0,0,.55),0_0_24px_rgba(120,120,255,.12)]
                   overflow-hidden ${side === "left" ? "ml-auto" : "mr-auto"}
-                  ${blockBumpKey ? "block-bump-once" : ""}`}
+                  ${showBlockBump ? "block-bump-once" : ""}`}
       style={
-        ultShakeKey
+        showUltShake
           ? { animation: "megaShake 750ms cubic-bezier(.36,.07,.19,.97) 1" }
           : undefined
       }
@@ -98,46 +142,70 @@ export function BattlePortrait({
           100% { transform: scale(1.0); opacity: 0; }
         }
 
-        @keyframes hpGlow { 0%{box-shadow:inset 0 0 0 0 rgba(255,80,80,0),0 0 0 rgba(0,0,0,0)} 30%{box-shadow:inset 0 0 24px rgba(255,90,90,.45),0 0 16px rgba(255,60,60,.35)} 100%{box-shadow:inset 0 0 0 0 rgba(255,80,80,0),0 0 0 rgba(0,0,0,0)} }
+        @keyframes hpGlow {
+          0%{box-shadow:inset 0 0 0 0 rgba(255,80,80,0),0 0 0 rgba(0,0,0,0)}
+          30%{box-shadow:inset 0 0 24px rgba(255,90,90,.45),0 0 16px rgba(255,60,60,.35)}
+          100%{box-shadow:inset 0 0 0 0 rgba(255,80,80,0),0 0 0 rgba(0,0,0,0)}
+        }
         .hp-glow-once { animation: hpGlow 800ms ease-out 1; }
 
-        @keyframes critCardFlash { 0%{box-shadow:inset 0 0 0 rgba(0,0,0,0);filter:saturate(1)} 18%{box-shadow:inset 0 0 120px rgba(255,50,60,.55)} 45%{box-shadow:inset 0 0 140px rgba(255,40,50,.65),0 0 44px rgba(255,60,80,.45);filter:saturate(1.25)} 80%{box-shadow:inset 0 0 80px rgba(255,40,50,.35),0 0 28px rgba(255,60,80,.25);filter:saturate(1.1)} 100%{box-shadow:inset 0 0 0 rgba(0,0,0,0);filter:saturate(1)} }
+        @keyframes critCardFlash {
+          0%{box-shadow:inset 0 0 0 rgba(0,0,0,0);filter:saturate(1)}
+          18%{box-shadow:inset 0 0 120px rgba(255,50,60,.55)}
+          45%{box-shadow:inset 0 0 140px rgba(255,40,50,.65),0 0 44px rgba(255,60,80,.45);filter:saturate(1.25)}
+          80%{box-shadow:inset 0 0 80px rgba(255,40,50,.35),0 0 28px rgba(255,60,80,.25);filter:saturate(1.1)}
+          100%{box-shadow:inset 0 0 0 rgba(0,0,0,0);filter:saturate(1)}
+        }
 
-        @keyframes blockFlash { 0%{box-shadow:inset 0 0 0 rgba(0,0,0,0)} 20%{box-shadow:inset 0 0 100px rgba(90,170,255,.45)} 60%{box-shadow:inset 0 0 70px rgba(90,170,255,.25)} 100%{box-shadow:inset 0 0 0 rgba(0,0,0,0)} }
+        @keyframes blockFlash {
+          0%{box-shadow:inset 0 0 0 rgba(0,0,0,0)}
+          20%{box-shadow:inset 0 0 100px rgba(90,170,255,.45)}
+          60%{box-shadow:inset 0 0 70px rgba(90,170,255,.25)}
+          100%{box-shadow:inset 0 0 0 rgba(0,0,0,0)}
+        }
         @keyframes shieldRipple { 0%{transform:scale(.9);opacity:.4} 100%{transform:scale(1.5);opacity:0} }
 
-        @keyframes megaShake { 10%,90%{transform:translate3d(-1px,0,0)} 20%,80%{transform:translate3d(2px,0,0)} 30%,50%,70%{transform:translate3d(-4px,0,0)} 40%,60%{transform:translate3d(4px,0,0)} }
+        @keyframes megaShake {
+          10%,90%{transform:translate3d(-1px,0,0)}
+          20%,80%{transform:translate3d(2px,0,0)}
+          30%,50%,70%{transform:translate3d(-4px,0,0)}
+          40%,60%{transform:translate3d(4px,0,0)}
+        }
 
-        @keyframes hitShake { 0%,100%{transform:translate3d(0,0,0)} 20%{transform:translate3d(-2px,0,0) rotate(-.2deg)} 40%{transform:translate3d(3px,0,0) rotate(.2deg)} 60%{transform:translate3d(-3px,0,0) rotate(-.2deg)} 80%{transform:translate3d(2px,0,0) rotate(.2deg)} }
+        @keyframes hitShake {
+          0%,100%{transform:translate3d(0,0,0)}
+          20%{transform:translate3d(-2px,0,0) rotate(-.2deg)}
+          40%{transform:translate3d(3px,0,0) rotate(.2deg)}
+          60%{transform:translate3d(-3px,0,0) rotate(-.2deg)}
+          80%{transform:translate3d(2px,0,0) rotate(.2deg)}
+        }
         .hit-shake-once { animation: hitShake 420ms cubic-bezier(.36,.07,.19,.97) 1; }
 
         @keyframes blockBump { 0%{transform:scale(1)} 35%{transform:scale(1.02)} 70%{transform:scale(1.008)} 100%{transform:scale(1)} }
         .block-bump-once { animation: blockBump 380ms ease-out 1; }
 
-        @keyframes ultimateFlash { 0%{box-shadow:inset 0 0 0 rgba(0,0,0,0)} 15%{box-shadow:inset 0 0 130px rgba(255,220,120,.55),0 0 36px rgba(150,80,255,.35)} 45%{box-shadow:inset 0 0 90px rgba(255,180,90,.35),0 0 20px rgba(150,80,255,.25)} 100%{box-shadow:inset 0 0 0 rgba(0,0,0,0)} }
+        @keyframes ultimateFlash {
+          0%{box-shadow:inset 0 0 0 rgba(0,0,0,0)}
+          15%{box-shadow:inset 0 0 130px rgba(255,220,120,.55),0 0 36px rgba(150,80,255,.35)}
+          45%{box-shadow:inset 0 0 90px rgba(255,180,90,.35),0 0 20px rgba(150,80,255,.25)}
+          100%{box-shadow:inset 0 0 0 rgba(0,0,0,0)}
+        }
 
-        /* anillo single (ya no lo usamos aquí, dejamos por compat) */
+        /* anillo single (compat) */
         .block-ring-single {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          position: absolute; inset: 0; pointer-events: none;
+          display: flex; align-items: center; justify-content: center;
         }
         .block-ring-single > span {
-          width: 160px;
-          height: 160px;
-          border-radius: 9999px;
+          width: 160px; height: 160px; border-radius: 9999px;
           border: 2px solid rgba(120,180,255,.55);
           box-shadow: 0 0 18px rgba(120,180,255,.35);
           animation: ringFlash 420ms ease-out 1;
         }
-
         @keyframes ringFlash {
-          0%   { opacity: 0; transform: scale(.92); box-shadow: 0 0 0 rgba(120,180,255,0); }
-          25%  { opacity: 1; box-shadow: 0 0 24px rgba(120,180,255,.55); }
-          100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 rgba(120,180,255,0); }
+          0%{opacity:0; transform:scale(.92); box-shadow:0 0 0 rgba(120,180,255,0)}
+          25%{opacity:1; box-shadow:0 0 24px rgba(120,180,255,.55)}
+          100%{opacity:1; transform:scale(1); box-shadow:0 0 0 rgba(120,180,255,0)}
         }
 
         .block-label{
@@ -159,23 +227,23 @@ export function BattlePortrait({
         Level {level}
       </div>
 
-      {/* Avatar area (vibra en BLOQUEO o CRÍTICO) */}
+      {/* Avatar area (tiembla en BLOCK o CRIT) */}
       <div
-        className={`h-[160px] flex items-center justify-center relative ${showBlockFx || showCritFx ? "hit-shake-once" : ""}`}
+        className={`h-[160px] flex items-center justify-center relative ${showHitShake ? "hit-shake-once" : ""}`}
       >
         {avatarUrl ? (
           <img
             src={avatarUrl}
+            alt={`${name} portrait`}
             className="w-28 h-28 object-cover rounded-xl opacity-95 ring-1 ring-white/[.06]"
           />
         ) : (
           <User className="w-16 h-16 text-gray-400" />
         )}
 
-        {/* BLOQUEO – escudo + ripple, desaparece solo */}
+        {/* BLOQUEO – escudo + ripple, auto-hide */}
         {showBlockFx && (
           <>
-            {/* flash azulado del card */}
             <div
               className="absolute inset-0 pointer-events-none"
               style={{
@@ -185,7 +253,6 @@ export function BattlePortrait({
                 mixBlendMode: "screen",
               }}
             />
-            {/* ripple recortado con forma de escudo */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
               <div
                 style={{
@@ -200,7 +267,6 @@ export function BattlePortrait({
                 }}
               />
             </div>
-            {/* escudo brillante */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
               <div
                 style={{
@@ -220,7 +286,7 @@ export function BattlePortrait({
           </>
         )}
 
-        {/* ULT FX (igual que antes) */}
+        {/* ULT FX */}
         {ultFlashKey > 0 && (
           <div
             className="absolute inset-0 pointer-events-none"
@@ -233,7 +299,7 @@ export function BattlePortrait({
           />
         )}
 
-        {/* CRÍTICO – brillo rojo temporal (no queda pintado) */}
+        {/* CRÍTICO – brillo rojo temporal (no queda un punto suelto) */}
         {showCritFx && (
           <div
             className="absolute inset-0 pointer-events-none"
@@ -278,7 +344,9 @@ export function BattlePortrait({
 
       <div className="mt-[2px]">
         <div
-          className={`h-7 border-y border-[var(--border)] bg-[rgba(255,255,255,.03)] overflow-hidden relative ${hpGlowKey ? "hp-glow-once" : ""}`}
+          className={`h-7 border-y border-[var(--border)] bg-[rgba(255,255,255,.03)] overflow-hidden relative ${
+            hpGlowKey ? "hp-glow-once" : ""
+          }`}
           key={hpGlowKey}
         >
           <div

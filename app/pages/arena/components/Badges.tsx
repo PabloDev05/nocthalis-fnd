@@ -1,4 +1,3 @@
-// src/pages/arena/components/Badges.tsx
 import {
   Crown,
   Percent,

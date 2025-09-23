@@ -1,31 +1,20 @@
 /* ───────────── Equipo ───────────── */
-export type EquipmentSlot =
-  | "helmet"
-  | "chest"
-  | "gloves"
-  | "boots"
-  | "mainWeapon"
-  | "offWeapon"
-  | "ring"
-  | "belt"
-  | "amulet";
+export type EquipmentSlot = "helmet" | "chest" | "gloves" | "boots" | "mainWeapon" | "offWeapon" | "ring" | "belt" | "amulet";
 
 export type Equipment = Record<EquipmentSlot, string | null>;
 
-/* ───────────── Stats base (BaseStats) ─────────────
-   Debe coincidir con lo que usa allocation.service y el seed.
-*/
+/* ───────────── Stats base (canon) ───────────── */
 export interface Stats {
   [x: string]: number;
   strength: number;
   dexterity: number;
   intelligence: number;
-  vitality: number;
+  constitution: number; // ← canon
   physicalDefense: number;
   magicalDefense: number;
   luck: number;
   endurance: number;
-  fate: number; // 👈 requerido por pasivas y proc scaling
+  fate: number;
 }
 
 /* ───────────── Resistencias ───────────── */
@@ -48,9 +37,7 @@ export interface Resistances {
   criticalDamageReduction: number;
 }
 
-/* ───────────── CombatStats (redondeados para UI) ─────────────
-   Sin MP ni manaSteal (no vienen en tu payload actual).
-*/
+/* ───────────── CombatStats ───────────── */
 export interface CombatStats {
   maxHP: number;
   attackPower: number;
@@ -66,7 +53,7 @@ export interface CombatStats {
   movementSpeed: number;
 }
 
-/* ───────────── Skills de clase ───────────── */
+/* ───────────── Skills / Clase ───────────── */
 export interface PassiveDefaultSkill {
   enabled?: boolean;
   name?: string;
@@ -78,22 +65,14 @@ export interface PassiveDefaultSkill {
   bonusDamage?: number;
   extraEffects?: Record<string, number>;
 }
-
 export interface UltimateSkill {
   enabled?: boolean;
   name?: string;
   description?: string;
   cooldownTurns?: number;
   effects?: Record<string, any>;
-  proc?: {
-    enabled?: boolean;
-    respectCooldown?: boolean;
-    procInfoEn?: string;
-    trigger?: Record<string, any>;
-  };
+  proc?: { enabled?: boolean; respectCooldown?: boolean; procInfoEn?: string; trigger?: Record<string, any> };
 }
-
-/* ───────────── Clase y subclases ───────────── */
 export interface SubclassDTO {
   id: string;
   name: string;
@@ -101,22 +80,18 @@ export interface SubclassDTO {
   imageSubclassUrl?: string;
   slug?: string | null;
 }
-
 export interface ClassMetaDTO {
   id: string;
   name: string;
   iconName: string;
   imageMainClassUrl: string;
-
   primaryWeapons: string[];
   secondaryWeapons: string[];
   defaultWeapon: string;
   allowedWeapons: string[];
-
   passiveDefaultSkill?: PassiveDefaultSkill | null;
-  passiveDefault?: PassiveDefaultSkill | null; // por compat
+  passiveDefault?: PassiveDefaultSkill | null;
   ultimateSkill?: UltimateSkill | null;
-
   subclasses: SubclassDTO[];
 }
 
@@ -129,51 +104,36 @@ export interface StaminaSnapshot {
   etaFullAt: string | null;
 }
 
-/* ───────────── Character API principal ─────────────
-   Alineado con CharacterResponseDTO del controller.
-*/
+/* ───────────── Character API principal ───────────── */
 export interface CharacterApi {
   id: string;
-  userId: string; // ObjectId string
-  username: string; // viene del populate en /character/me
-
+  userId: string;
+  username: string;
   class: ClassMetaDTO;
   selectedSubclass: SubclassDTO | null;
-
   level: number;
   experience: number;
 
   stats: Stats;
   resistances: Resistances;
   combatStats: CombatStats;
-
   equipment: Equipment;
   inventory: string[];
 
-  createdAt: string; // ISO
-  updatedAt: string; // ISO
-
-  /** URL opcional del retrato del personaje (si el backend lo envía) */
+  createdAt: string;
+  updatedAt: string;
   avatarUrl?: string | null;
 
-  // Extras útiles para la UI
   availablePoints?: number;
   stamina: StaminaSnapshot;
 
-  // Fallbacks / compat opcionales
   className?: string;
   passivesUnlocked?: string[];
-
-  // Atajos opcionales en raíz (la UI los usa si están)
   passiveDefaultSkill?: PassiveDefaultSkill | null;
-  passiveDefault?: PassiveDefaultSkill | null;
   ultimateSkill?: UltimateSkill | null;
 
-  /* ──────────── NUEVO: atajos de daño/ataque para la UI ────────────
-     Si el backend los envía, la UI los usa; si no, aplica fallback local.
-  */
-  primaryPowerKey?: "attackPower" | "magicPower"; // qué escalar mostrar como "Attack"
-  primaryPower?: number; // valor directo del poder primario (opcional)
-  uiDamageMin?: number; // daño mínimo visual
-  uiDamageMax?: number; // daño máximo visual
+  primaryPowerKey?: "attackPower" | "magicPower";
+  primaryPower?: number;
+  uiDamageMin?: number;
+  uiDamageMax?: number;
 }

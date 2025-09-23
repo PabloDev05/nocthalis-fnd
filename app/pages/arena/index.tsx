@@ -1,9 +1,9 @@
-// src/pages/arena/index.tsx
 import { JSX, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate, useLocation } from "react-router";
-import { Crown, Flame, Settings, Swords, User, RotateCcw } from "lucide-react";
+import { Flame, Settings, Swords, User, RotateCcw } from "lucide-react";
+import { BigStaminaBar } from "./components/LadderAndStamina";
 
 import {
   API_BASE,
@@ -19,10 +19,10 @@ import {
 } from "./types";
 import { asInt, extractStamina, skillText } from "./helpers";
 import { buildAnimationSchedule } from "./scheduler";
-import { BattlePortrait } from "./components/Portrait";
-import { CombatLog, RewardsPanel } from "./components/LogsAndRewards";
-import { BigStaminaBar, LadderList } from "./components/LadderAndStamina";
-import { resolvePrimaryCombatKey } from "../../lib/primary";
+
+// vistas nuevas
+import { SelectView } from "./views/SelectView";
+import { DuelView } from "./views/DuelView";
 
 export default function Arena() {
   const navigate = useNavigate();
@@ -70,7 +70,13 @@ export default function Arena() {
   const [isFighting, setIsFighting] = useState(false);
   const timers = useRef<number[]>([]);
 
-  // pulses / FX
+  // locks
+  const attackLockRef = useRef(false);
+  const resolveLockRef = useRef(false);
+  const currentMatchIdRef = useRef<string | null>(null);
+  const idemKeyRef = useRef<string | null>(null);
+
+  // FX
   const [pulseLeftPassive, setPulseLeftPassive] = useState(0);
   const [pulseLeftUlt, setPulseLeftUlt] = useState(0);
   const [pulseRightPassive, setPulseRightPassive] = useState(0);
@@ -88,7 +94,7 @@ export default function Arena() {
   const [blockBumpLeft, setBlockBumpLeft] = useState(0);
   const [blockBumpRight, setBlockBumpRight] = useState(0);
 
-  // skill texts + dmg ranges
+  // skills + dmg ranges
   const [myPassiveText, setMyPassiveText] = useState<string | null>(null);
   const [myUltText, setMyUltText] = useState<string | null>(null);
   const [oppPassiveText, setOppPassiveText] = useState<string | null>(null);
@@ -109,19 +115,35 @@ export default function Arena() {
 
   async function refillStamina() {
     try {
-      const s = await client.get("/stamina");
-      const snap = extractStamina(s.data);
+      // si conocemos el max del contexto, lo usamos; si no, pedimos snapshot primero
+      let max = staminaMax;
+      if (!max || !Number.isFinite(max)) {
+        const s0 = await client.get("/stamina");
+        const snap0 = extractStamina(s0.data);
+        setStamina(snap0.current, snap0.max);
+        max = snap0.max;
+      }
+
+      // setear a tope con endpoint admin
+      await client.post("/stamina/admin/set", { value: Number(max ?? 100) });
+
+      // refrescar snapshot para reflejar la UI
+      const s1 = await client.get("/stamina");
+      const snap1 = extractStamina(s1.data);
+      setStamina(snap1.current, snap1.max);
+    } catch (e: any) {
+      // si no hay permisos/admin, al menos refrescamos
       try {
-        const setRes = await client.post("/stamina/admin/set", {
-          value: snap.max,
-        });
-        const upd = extractStamina(setRes.data);
-        setStamina(upd.current, upd.max);
-        return;
-      } catch {}
-      setStamina(snap.max, snap.max);
-    } catch {
-      setStamina(staminaMax || 100, staminaMax || 100);
+        const s = await client.get("/stamina");
+        const snap = extractStamina(s.data);
+        setStamina(snap.current, snap.max);
+        // feedback útil
+        setErr(
+          "No se pudo usar /stamina/admin/set (¿sin permiso?). Se refrescó la estamina."
+        );
+      } catch {
+        setErr("No se pudo leer la estamina del servidor.");
+      }
     }
   }
 
@@ -226,6 +248,7 @@ export default function Arena() {
       mounted = false;
       clearTimers();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
 
   const myName = (me as any)?.username ?? (me as any)?.name ?? "—";
@@ -261,6 +284,7 @@ export default function Arena() {
       setMyDmgRange(null);
       setOppDmgRange(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, selectedId, myMaxHP, selectedOpp?.maxHP]);
 
   const isPlayerRole = (role: "attacker" | "defender", turn: number) =>
@@ -425,11 +449,17 @@ export default function Arena() {
   }
 
   async function startChallenge() {
+    if (attackLockRef.current) return;
     if (!selectedOpp || isFighting) return;
+
     if ((staminaCurrent ?? 0) < PVP_STAMINA_COST) {
       setErr(`You need ${PVP_STAMINA_COST} stamina to attack.`);
       return;
     }
+
+    attackLockRef.current = true;
+    resolveLockRef.current = false;
+    currentMatchIdRef.current = null;
 
     setIsFighting(true);
     setErr(null);
@@ -463,10 +493,16 @@ export default function Arena() {
     setMyDmgRange(null);
     setOppDmgRange(null);
 
+    idemKeyRef.current = `${selectedOpp.id}:${Date.now()}:${Math.random()
+      .toString(36)
+      .slice(2)}`;
+
     try {
-      const crt = await client.post("/arena/challenges", {
-        opponentId: selectedOpp.id,
-      });
+      const crt = await client.post(
+        "/arena/challenges",
+        { opponentId: selectedOpp.id },
+        { headers: { "X-Idempotency-Key": idemKeyRef.current! } }
+      );
 
       try {
         const s0 = await client.get("/stamina");
@@ -475,6 +511,8 @@ export default function Arena() {
       } catch {}
 
       const matchId: string | undefined = crt?.data?.matchId;
+      currentMatchIdRef.current = matchId ?? null;
+
       const ca = crt?.data?.attacker;
       const cd = crt?.data?.defender;
 
@@ -507,6 +545,9 @@ export default function Arena() {
         setIsFighting(false);
         return;
       }
+
+      if (resolveLockRef.current) return;
+      resolveLockRef.current = true;
 
       let pvp: any;
       try {
@@ -623,6 +664,8 @@ export default function Arena() {
       } catch {}
     } finally {
       setIsFighting(false);
+      attackLockRef.current = false;
+      resolveLockRef.current = false;
     }
   }
 
@@ -640,17 +683,6 @@ export default function Arena() {
     navigate("/login", { replace: true });
   };
   const canAttack = (staminaCurrent ?? 0) >= PVP_STAMINA_COST;
-
-  // ★ claves primarias para "Attack" visible
-  const myClassName = (me as any)?.class?.name ?? (me as any)?.className ?? "";
-  const myPrimaryKey = resolvePrimaryCombatKey(
-    (me as any)?.primaryPowerKey,
-    myClassName
-  );
-  const oppPrimaryKey = resolvePrimaryCombatKey(
-    (selectedOpp as any)?.primaryPowerKey,
-    selectedOpp?.className ?? ""
-  );
 
   return (
     <div className="min-h-screen text-sm leading-tight bg-[var(--bg)] text-[13px]">
@@ -753,7 +785,7 @@ export default function Arena() {
                 <button
                   onClick={refillStamina}
                   className="ml-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--border)] hover:border-[var(--accent-weak)] text-[12px] text-zinc-200"
-                  title="Refill stamina to 100% (debug)"
+                  title="Set stamina to max (admin) y refrescar"
                 >
                   <RotateCcw className="w-4 h-4" /> Refill
                 </button>
@@ -770,207 +802,76 @@ export default function Arena() {
 
               {/* LIST */}
               {!loading && view === "select" && (
-                <div className="space-y-3">
-                  <LadderList
-                    opponents={opponents}
-                    selectedId={selectedId}
-                    setSelectedId={setSelectedId}
-                    q={q}
-                    setQ={setQ}
-                  />
-                  <div className="flex flex-col items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={startChallenge}
-                      disabled={!selectedOpp || !canAttack || isFighting}
-                      className="px-6 py-2 rounded-xl bg-[var(--accent)]/80 hover:bg-[var(--accent)] disabled:opacity-50 text-white font-semibold shadow-[0_0_10px_rgba(120,120,255,.25)]"
-                      title={
-                        !canAttack
-                          ? `You need ${PVP_STAMINA_COST} stamina`
-                          : `Start fight`
-                      }
-                    >
-                      {isFighting ? "Preparing..." : "Attack"}
-                    </button>
-                    {!canAttack && (
-                      <div className="text-[11px] text-zinc-400">
-                        You need {PVP_STAMINA_COST} stamina to attack.
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <SelectView
+                  opponents={opponents}
+                  selectedId={selectedId}
+                  setSelectedId={(id) => setSelectedId(id)}
+                  q={q}
+                  setQ={setQ}
+                  canAttack={canAttack}
+                  isFighting={isFighting}
+                  onAttack={startChallenge}
+                  staminaCost={PVP_STAMINA_COST}
+                />
               )}
 
               {/* DUEL */}
-              {!loading && view === "duel" && (
-                <div className="flex flex-col items-center gap-5">
-                  {/* Portraits */}
-                  <div className="w-full max-w-[1080px] mx-auto flex items-start justify-center gap-8">
-                    {/* Player */}
-                    <BattlePortrait
-                      side="left"
-                      widthClass="w-[320px]"
-                      name={myName}
-                      level={myLevel}
-                      hp={hpMe}
-                      maxHP={myMaxHP}
-                      avatarUrl={me?.avatarUrl ?? null}
-                      passiveText={myPassiveText ?? "—"}
-                      ultimateText={myUltText ?? "—"}
-                      passivePulseKey={pulseLeftPassive}
-                      ultimatePulseKey={pulseLeftUlt}
-                      blockFlashKey={blockFlashLeft}
-                      blockBumpKey={blockBumpLeft}
-                      hpGlowKey={hpGlowLeft}
-                      ultFlashKey={ultFlashLeft}
-                      ultShakeKey={ultShakeLeft}
-                      hitShakeKey={hitShakeLeft}
-                      stats={{
-                        damageMin:
-                          myDmgRange?.min ?? (me as any)?.uiDamageMin ?? 0,
-                        damageMax:
-                          myDmgRange?.max ?? (me as any)?.uiDamageMax ?? 0,
-                        attackPower:
-                          myPrimaryKey === "magicPower"
-                            ? (me?.combatStats as any)?.magicPower
-                            : (me?.combatStats as any)?.attackPower,
-                        blockChance:
-                          (me?.combatStats as any)?.blockChance ??
-                          (me?.combatStats as any)?.block,
-                        criticalChance:
-                          (me?.combatStats as any)?.criticalChance ??
-                          (me?.combatStats as any)?.critChance ??
-                          (me?.combatStats as any)?.crit,
-                        evasion:
-                          (me?.combatStats as any)?.evasion ??
-                          (me?.combatStats as any)?.evade ??
-                          (me?.combatStats as any)?.evasionChance ??
-                          (me?.combatStats as any)?.evadeChance ??
-                          (me?.combatStats as any)?.dodge ??
-                          (me?.combatStats as any)?.dodgeChance ??
-                          0,
-                        fate: (me as any)?.stats?.fate ?? 0,
-                      }}
-                    />
-
-                    {/* VS + Rewards */}
-                    <div className="min-w-[220px] flex flex-col items-center justify-start select-none gap-3 pt-4">
-                      <div
-                        className={`text-6xl font-black ${
-                          centerLabel === "WIN"
-                            ? "text-emerald-400 drop-shadow-[0_0_16px_rgba(16,185,129,.7)]"
-                            : centerLabel === "LOSE"
-                              ? "text-red-500 drop-shadow-[0_0_16px_rgba(239,68,68,.7)]"
-                              : centerLabel === "DRAW"
-                                ? "text-zinc-300 drop-shadow-[0_0_12px_rgba(255,255,255,.5)]"
-                                : "text-[var(--accent)] drop-shadow-[0_0_14px_rgba(120,120,255,0.6)]"
-                        } shake-once`}
-                        style={{ fontFamily: "'Cinzel Decorative', serif" }}
-                        key={shakeKey}
-                      >
-                        <span
-                          className={
-                            centerLabel === "VS" ? "animate-pulse" : ""
-                          }
-                        >
-                          {centerLabel}
-                        </span>
-                      </div>
-
-                      {duelResult && (
-                        <div className="text-center text-[12px] text-zinc-300 max-w-[360px]">
-                          {duelResult.summary}
-                        </div>
-                      )}
-                      {duelResult && rewards && (
-                        <RewardsPanel rewards={rewards} />
-                      )}
-
-                      {duelResult && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            clearTimers();
-                            setView("select");
-                            setCenterLabel("VS");
-                            setCombatLog([]);
-                            setRewards(null);
-                          }}
-                          className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--border)] hover:border-[var(--accent-weak)] text-[12px] text-zinc-200 bg-white/[.02]"
-                          title="Back to list"
-                        >
-                          <RotateCcw className="w-4 h-4" /> Back
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Enemy */}
-                    <BattlePortrait
-                      side="right"
-                      widthClass="w-[320px]"
-                      name={selectedOpp?.name ?? "—"}
-                      level={selectedOpp?.level ?? "—"}
-                      hp={hpOpp}
-                      maxHP={selectedOpp?.maxHP ?? 0}
-                      avatarUrl={selectedOpp?.avatarUrl ?? null}
-                      passiveText={oppPassiveText ?? "—"}
-                      ultimateText={oppUltText ?? "—"}
-                      passivePulseKey={pulseRightPassive}
-                      ultimatePulseKey={pulseRightUlt}
-                      hpGlowKey={hpGlowRight}
-                      blockFlashKey={blockFlashRight}
-                      ultFlashKey={ultFlashRight}
-                      ultShakeKey={ultShakeRight}
-                      hitShakeKey={hitShakeRight}
-                      blockBumpKey={blockBumpRight}
-                      stats={{
-                        damageMin:
-                          oppDmgRange?.min ??
-                          (selectedOpp?.combatStats as any)?.minDamage ??
-                          (selectedOpp?.combatStats as any)?.damageMin ??
-                          0,
-                        damageMax:
-                          oppDmgRange?.max ??
-                          (selectedOpp?.combatStats as any)?.maxDamage ??
-                          (selectedOpp?.combatStats as any)?.damageMax ??
-                          0,
-                        attackPower:
-                          oppPrimaryKey === "magicPower"
-                            ? (selectedOpp as any)?.combatStats?.magicPower
-                            : (selectedOpp as any)?.combatStats?.attackPower,
-                        blockChance:
-                          (selectedOpp?.combatStats as any)?.blockChance ??
-                          (selectedOpp?.combatStats as any)?.block,
-                        criticalChance:
-                          (selectedOpp?.combatStats as any)?.criticalChance ??
-                          (selectedOpp?.combatStats as any)?.critChance ??
-                          (selectedOpp?.combatStats as any)?.crit,
-                        evasion:
-                          (selectedOpp?.combatStats as any)?.evasion ??
-                          (selectedOpp?.combatStats as any)?.evade ??
-                          (selectedOpp?.combatStats as any)?.evasionChance ??
-                          (selectedOpp?.combatStats as any)?.evadeChance ??
-                          (selectedOpp?.combatStats as any)?.dodge ??
-                          (selectedOpp?.combatStats as any)?.dodgeChance ??
-                          0,
-                        fate: (selectedOpp as any)?.stats?.fate ?? 0,
-                      }}
-                    />
-                  </div>
-
-                  {/* Combat Log */}
-                  <div className="w-full max-w-[980px] mx-auto flex flex-col items-center">
-                    <div className="w-full">
-                      <CombatLog entries={combatLog} />
-                    </div>
-                  </div>
-                </div>
+              {!loading && view === "duel" && selectedOpp && me && (
+                <DuelView
+                  me={me}
+                  myName={myName}
+                  myLevel={myLevel}
+                  myMaxHP={myMaxHP}
+                  selectedOpp={selectedOpp}
+                  // hp
+                  hpMe={hpMe}
+                  hpOpp={hpOpp}
+                  // labels
+                  centerLabel={centerLabel}
+                  shakeKey={shakeKey}
+                  onBack={() => {
+                    clearTimers();
+                    setView("select");
+                    setCenterLabel("VS");
+                    setCombatLog([]);
+                    setRewards(null);
+                  }}
+                  // skills text
+                  myPassiveText={myPassiveText}
+                  myUltText={myUltText}
+                  oppPassiveText={oppPassiveText}
+                  oppUltText={oppUltText}
+                  // dmg ranges
+                  myDmgRange={myDmgRange}
+                  oppDmgRange={oppDmgRange}
+                  // fx keys
+                  pulseLeftPassive={pulseLeftPassive}
+                  pulseLeftUlt={pulseLeftUlt}
+                  pulseRightPassive={pulseRightPassive}
+                  pulseRightUlt={pulseRightUlt}
+                  hpGlowLeft={hpGlowLeft}
+                  hpGlowRight={hpGlowRight}
+                  blockFlashLeft={blockFlashLeft}
+                  blockFlashRight={blockFlashRight}
+                  ultFlashLeft={ultFlashLeft}
+                  ultFlashRight={ultFlashRight}
+                  ultShakeLeft={ultShakeLeft}
+                  ultShakeRight={ultShakeRight}
+                  hitShakeLeft={hitShakeLeft}
+                  hitShakeRight={hitShakeRight}
+                  blockBumpLeft={blockBumpLeft}
+                  blockBumpRight={blockBumpRight}
+                  // results
+                  duelResult={duelResult}
+                  rewards={rewards}
+                  // log
+                  combatLog={combatLog}
+                />
               )}
             </div>
           </main>
         </div>
       </div>
-
       <BigStaminaBar current={staminaCurrent ?? 0} max={staminaMax ?? 10} />
     </div>
   );

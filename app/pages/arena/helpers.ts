@@ -1,16 +1,26 @@
-// src/pages/arena/utils.ts
-import { StaminaSnap, TimelineBE, TimelineEvent, LogEntry } from "./types";
+// src/pages/arena/helpers.ts
+import type { StaminaSnap, TimelineBE, TimelineEvent, LogEntry } from "./types";
 
 export const asInt = (raw: any) => {
   const n = Number(raw);
   return Number.isFinite(n) ? Math.round(n) : 0;
 };
 
+/** Extrae {current,max} desde varias formas de snapshot del backend */
 export function extractStamina(obj: any): StaminaSnap {
-  if (!obj || typeof obj !== "object") return { current: 0, max: 10 };
-  const current = asInt(obj.current ?? obj.value ?? obj.stamina ?? obj.energy ?? obj?.snapshot?.current ?? 0);
-  const max = asInt(obj.max ?? obj.maxValue ?? obj.staminaMax ?? obj.energyMax ?? obj.capacity ?? obj?.snapshot?.max ?? 10) || 10;
-  return { current: Math.max(0, current), max: Math.max(1, max) };
+  // soportar axiosResponse-like: { data: {...} }
+  const src = obj && typeof obj === "object" && "data" in obj ? (obj as any).data : obj;
+  if (!src || typeof src !== "object") return { current: 0, max: 10 };
+
+  const current = asInt(src.current ?? src.value ?? src.stamina ?? src.energy ?? src?.snapshot?.current ?? 0);
+
+  const maxRaw = asInt(src.max ?? src.maxValue ?? src.staminaMax ?? src.energyMax ?? src.capacity ?? src?.snapshot?.max ?? 10) || 10;
+
+  const max = Math.max(1, maxRaw);
+  // clamp para que nunca mostremos más que el máximo
+  const clamped = Math.min(Math.max(0, current), max);
+
+  return { current: clamped, max };
 }
 
 export const formatChance = (v: number | undefined) => {
@@ -24,8 +34,7 @@ export const fatePercent = (v: number | undefined) => {
   return n <= 1 ? `${Math.round(n * 100)}%` : `${Math.round(n)}%`;
 };
 
-export const skillText = (obj?: { name?: string; description?: string } | null) =>
-  obj?.name ? `${obj.name}${obj.description ? `: ${obj.description}` : ""}` : null;
+export const skillText = (obj?: { name?: string; description?: string } | null) => (obj?.name ? `${obj.name}${obj.description ? `: ${obj.description}` : ""}` : null);
 
 /* ─── robust event detection ─── */
 function hasAny(obj: any, keys: string[]) {
@@ -34,6 +43,7 @@ function hasAny(obj: any, keys: string[]) {
     return v === true || String(v ?? "").toLowerCase() === k.toLowerCase();
   });
 }
+
 function readFlags(raw: any) {
   const ev = String(raw?.event ?? raw?.outcome ?? "").toLowerCase();
   const tags = raw?.tags;
@@ -59,7 +69,8 @@ function readFlags(raw: any) {
   return { isCrit, isBlock, isMiss, isDot, isPassive, isUltimate };
 }
 
-export function normalizeEvent(raw: TimelineBE): TimelineEvent {
+export function normalizeEvent(raw?: TimelineBE | null): TimelineEvent {
+  if (!raw) return "hit";
   const ev = String(raw?.event ?? raw?.outcome ?? "").toLowerCase();
   const f = readFlags(raw);
   if (f.isPassive) return "passive_proc";
