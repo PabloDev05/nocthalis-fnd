@@ -12,7 +12,7 @@ const API_BASE_URL =
 const Login = () => {
   const { login } = useAuth();
   const [serverError, setServerError] = useState("");
-  const [showPassword, setShowPassword] = useState(false); // 👈 nuevo
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const validationSchema = Yup.object({
@@ -30,7 +30,6 @@ const Login = () => {
       { setSubmitting }: { setSubmitting: (isSubmitting: boolean) => void }
     ) => {
       setServerError("");
-
       try {
         const res = await axios.post(`${API_BASE_URL}/auth/login`, {
           email: values.email,
@@ -54,8 +53,7 @@ const Login = () => {
           localStorage.removeItem("selectedClassDescription");
           localStorage.removeItem("selectedClassJSON");
 
-          if (res.data.classChosen) navigate("/game");
-          else navigate("/select-class");
+          navigate(res.data.classChosen ? "/game" : "/select-class");
         } else {
           setServerError("Respuesta inválida del servidor");
         }
@@ -76,18 +74,39 @@ const Login = () => {
 
   return (
     <PublicRoute>
-      <div className="relative w-full h-screen bg-gradient-to-r from-black via-[#080810] to-[#0f0f1c] overflow-hidden">
+      <div className="relative min-h-screen overflow-hidden bg-black">
+        {/* Imagen de fondo */}
         <img
-          src="/assets/backgrounds/notcthalis-login-bg-6.png"
+          src="/assets/backgrounds/nocthalis-login-bg-8.png"
           alt="Nocthalis"
-          className="w-auto h-full object-contain absolute top-0 right-100 left-50 z-0"
+          className="absolute inset-0 h-full w-full object-cover brightness-105 saturate-110"
+          style={{ objectPosition: "left 32% top 18%" }}
         />
 
-        <div className="absolute top-1/2 left-[60%] transform -translate-y-1/2 ">
-          <div className="w-[420px] text-white bg-[#0f0f1c]/90 backdrop-blur-md rounded-xl p-8 border border-gray-700 shadow-xl">
-            <h2 className="text-3xl font-bold text-center mb-6">
+        {/* Overlay sutil gris-azulado */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: `
+              linear-gradient(0deg, rgba(8, 10, 20, 0.25), rgba(8, 10, 20, 0.25))
+            `,
+          }}
+        />
+
+        {/* Contenido */}
+        <div className="relative z-10 flex min-h-screen items-center justify-center md:justify-end px-4 md:pr-[8vw]">
+          {/* Panel más pequeño y neutro */}
+          <div
+            className="w-full max-w-xs text-white rounded-xl p-5 border backdrop-blur-md 
+                          shadow-[0_12px_40px_rgba(0,0,0,0.55)]
+                          bg-[#11131a]/90 border-white/10"
+          >
+            <h2 className="text-xl font-semibold text-center mb-1 tracking-wide text-gray-100">
               Iniciar sesión
             </h2>
+            <p className="text-center text-xs text-gray-400 mb-4">
+              Bienvenido a <span className="text-gray-200">Nocthalis</span>
+            </p>
 
             <Formik
               initialValues={initialValues}
@@ -95,17 +114,17 @@ const Login = () => {
               onSubmit={handleSubmit}
             >
               {({ isSubmitting }) => (
-                <Form className="space-y-5">
+                <Form className="space-y-3">
                   {serverError && (
-                    <div className="bg-red-900/40 text-red-400 border border-red-600 p-3 rounded text-sm">
+                    <div className="bg-red-900/40 text-red-300 border border-red-600/40 p-2 rounded text-xs">
                       {serverError}
                     </div>
                   )}
 
                   <div>
                     <label
-                      className="block text-sm mb-1 text-gray-300"
                       htmlFor="email"
+                      className="block text-xs mb-1 text-gray-300"
                     >
                       Email
                     </label>
@@ -114,36 +133,35 @@ const Login = () => {
                       name="email"
                       type="email"
                       autoComplete="email"
-                      className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="w-full bg-[#0d0f16]/80 border border-gray-600/40 rounded px-3 py-1.5 text-sm text-white placeholder-gray-400
+                                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                       placeholder="tu@email.com"
                     />
                     <ErrorMessage
                       name="email"
                       component="div"
-                      className="text-red-400 text-sm mt-1"
+                      className="text-red-400 text-xs mt-1"
                     />
                   </div>
 
                   <div>
                     <label
-                      className="block text-sm mb-1 text-gray-300"
                       htmlFor="password"
+                      className="block text-xs mb-1 text-gray-300"
                     >
                       Contraseña
                     </label>
-
-                    {/* 👇 wrapper para el ojito */}
                     <div className="relative">
                       <Field
                         id="password"
                         name="password"
                         type={showPassword ? "text" : "password"}
                         autoComplete="current-password"
-                        className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 pr-10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="w-full bg-[#0d0f16]/80 border border-gray-600/40 rounded px-3 py-1.5 pr-9 text-sm text-white placeholder-gray-400
+                                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                         placeholder="••••••••"
                       />
-
-                      {/* Botón ojito */}
+                      {/* Ojo sobrio */}
                       <button
                         type="button"
                         onClick={() => setShowPassword((v) => !v)}
@@ -152,7 +170,7 @@ const Login = () => {
                             ? "Ocultar contraseña"
                             : "Mostrar contraseña"
                         }
-                        className="absolute inset-y-0 right-2 flex items-center px-2 text-gray-400 hover:text-gray-200"
+                        className="absolute inset-y-0 right-2 flex items-center px-1 text-gray-400 hover:text-gray-200"
                         tabIndex={-1}
                       >
                         {showPassword ? (
@@ -160,7 +178,7 @@ const Login = () => {
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 24 24"
-                            className="h-5 w-5"
+                            className="h-4 w-4"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="1.5"
@@ -176,7 +194,7 @@ const Login = () => {
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 24 24"
-                            className="h-5 w-5"
+                            className="h-4 w-4"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="1.5"
@@ -191,33 +209,34 @@ const Login = () => {
                         )}
                       </button>
                     </div>
-
                     <ErrorMessage
                       name="password"
                       component="div"
-                      className="text-red-400 text-sm mt-1"
+                      className="text-red-400 text-xs mt-1"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className={`w-full py-2 rounded bg-[#2f1e4d] hover:bg-[#40235f] transition duration-300 shadow-md text-white ${
-                      isSubmitting ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
+                    className={`w-full py-1.5 rounded bg-blue-700 hover:bg-blue-600 transition duration-300 shadow-md 
+                                text-white text-sm font-medium
+                                ${isSubmitting ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     {isSubmitting ? "Ingresando..." : "Ingresar"}
                   </button>
 
-                  <p className="text-sm mt-4 text-center text-gray-400">
-                    ¿No tienes cuenta?{" "}
-                    <Link
-                      to="/select-class"
-                      className="text-purple-400 hover:underline hover:text-purple-300"
-                    >
-                      Regístrate aquí
-                    </Link>
-                  </p>
+                  <div className="pt-2 border-t border-gray-600/30">
+                    <p className="text-xs mt-2 text-center text-gray-400">
+                      ¿No tienes cuenta?{" "}
+                      <Link
+                        to="/select-class"
+                        className="text-blue-400 hover:underline hover:text-blue-300"
+                      >
+                        Regístrate aquí
+                      </Link>
+                    </p>
+                  </div>
                 </Form>
               )}
             </Formik>

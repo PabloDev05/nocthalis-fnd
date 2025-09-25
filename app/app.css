@@ -1,5 +1,4 @@
 @import "tailwindcss";
-
 @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&display=swap');
 
 /* app.css — Dark Gothic minimal, realista */
@@ -23,6 +22,8 @@
   --accent: #585caa;      /* índigo apagado */
   --accent-weak: #3a3e72; /* para hover, bordes */
   --brass: #9a8458;       /* latón viejo (muy discreto) */
+
+  --radius: 10px;         /* radio base */
 }
 
 /* Fondo general: sin brillos, sólo un leve viñeteado frío */
@@ -33,7 +34,13 @@ html, body, #root {
     radial-gradient(900px 600px at 80% 110%, rgba(154,132,88,.06), transparent 60%),
     linear-gradient(#0a0c10, #0a0c10);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* Reset pequeño */
+*, *::before, *::after { box-sizing: border-box; }
+button { cursor: pointer; }
 
 /* Brillo suave cuando cambian los combat stats */
 @keyframes stat-glow-kf {
@@ -41,9 +48,8 @@ html, body, #root {
   30%  { text-shadow: 0 0 10px rgba(120,120,255,.95); }
   100% { text-shadow: 0 0 0 rgba(120,120,255,0); }
 }
-.stat-glow {
-  animation: stat-glow-kf 800ms ease-out 1;
-}
+.stat-glow { animation: stat-glow-kf 800ms ease-out 1; }
+
 /* ───────────────────────────────────────────────────────────── */
 /* Utilidades de componente (sin brillos ni saturación)          */
 /* ───────────────────────────────────────────────────────────── */
@@ -52,7 +58,7 @@ html, body, #root {
 .dark-panel {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   box-shadow: 0 8px 24px rgba(0,0,0,.35);
 }
 
@@ -61,7 +67,7 @@ html, body, #root {
   padding: 10px 12px;
   background: var(--panel-2);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   color: var(--text-muted);
   transition: background-color .18s ease, border-color .18s ease, color .18s ease;
 }
@@ -80,31 +86,46 @@ html, body, #root {
 .stat-text { color: var(--text); }
 .stat-text-muted { color: var(--text-muted); }
 
-/* Slots / celdas (equipo e inventario): sin brillos, borde sutil */
+/* ── Slots / celdas (equipo e inventario) ───────────────────── */
+/* Más compactos y con límites superiores para que no “crezcan” de más en desktop */
 .equipment-slot {
-  width: 84px; height: 84px;
+  width: clamp(58px, 7.2vw, 76px);
+  height: clamp(58px, 7.2vw, 76px);
   background: #10141c;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.015);
+  flex: 0 0 auto;
+  overflow: hidden;
 }
 .equipment-slot:hover { border-color: var(--accent-weak); }
+.equipment-slot svg { width: 60%; height: 60%; pointer-events: none; }
+
+/* Slots del avatar: aún más chicos y con margen propio */
+.equip-sm {
+  width: clamp(52px, 5.4vw, 68px);
+  height: clamp(52px, 5.4vw, 68px);
+  margin: .35rem;
+}
+.equip-sm svg { width: 62%; height: 62%; }
 
 /* Tarjeta para secciones internas */
 .card-muted {
   background: #0f131c;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
 }
 
 /* Acentos muy discretos */
 .text-accent { color: var(--accent); }
 .text-brass { color: var(--brass); }
 
-/* Barra de nivel: sólida, sin glow */
+/* Badge/etiquetas */
 .badge-level {
   background: var(--accent);
   color: #fff;
+  border-radius: 6px;
+  letter-spacing: .2px;
 }
 
 /* Inputs oscuros, foco sobrio */
@@ -121,16 +142,84 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* Enlaces superiores */
-a { color: var(--text-muted); }
+a { color: var(--text-muted); text-decoration: none; }
 a:hover { color: #e1e4ea; }
 
 /* Iconos (lucide) más sobrios por defecto */
 svg { stroke-opacity: .9; }
 
-/* Pequeños ajustes de contraste en separadores */
-.hr, .divider, .inventory-divider {
-  border-color: var(--border);
+/* Separadores */
+.hr, .divider, .inventory-divider { border-color: var(--border); }
+
+/* Redondeo global coherente */
+.rounded-lg, .rounded-xl, .rounded-2xl { border-radius: var(--radius); }
+
+/* Evitar truncados feos si algún comp usa .truncate */
+.no-truncate, .wrap {
+  overflow: visible !important;
+  white-space: normal !important;
+  text-overflow: clip !important;
+  word-break: break-word;
 }
 
-/* Opcional: reduce un poco el redondeo extremo que da look "soft/toy" */
-.rounded-lg, .rounded-xl, .rounded-2xl { border-radius: 10px; }
+/* Tooltips */
+.tooltip { position: relative; }
+.tooltip > .tooltip-content {
+  position: absolute;
+  z-index: 50;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.82);
+  color: #e7e9ed;
+  font-size: 11px;
+  line-height: 1.2;
+  max-width: 280px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  pointer-events: none;
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Grids utilitarias para slots (5 fijos, sin desbordes)         */
+/* ───────────────────────────────────────────────────────────── */
+.slot-grid-5 {
+  display: grid;
+  /* columnas que PUEDEN encogerse sin romper el layout */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* Hace a los slots fluidos dentro de la grid, pisando el ancho/alto fijos */
+.slot-fluid.equipment-slot {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1 / 1;
+}
+
+@media (min-width: 1536px) {
+  .slot-grid-5 { gap: 14px; } /* un poco más de aire en 2K */
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Responsivo fino                                              */
+/* ───────────────────────────────────────────────────────────── */
+@media (min-width: 1280px) {
+  .equip-sm { margin: .45rem; }
+}
+
+@media (min-width: 1536px) {
+  /* en 1920+ NO agrandamos slots, sólo aumentamos el aire */
+  .equipment-slot { width: 76px; height: 76px; }
+  .equip-sm       { width: 66px; height: 66px; margin: .6rem; }
+}
+
+@media (max-width: 1024px) {
+  .gothic-button { padding: 9px 10px; }
+}
+
+@media (max-width: 640px) {
+  .dark-panel { border-radius: 8px; }
+  .gothic-button { padding: 8px 9px; }
+  .equipment-slot { width: 64px; height: 64px; } /* tacto en móviles chicos */
+}
+
