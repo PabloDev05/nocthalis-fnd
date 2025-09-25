@@ -1,5 +1,5 @@
 import { PrivateRoute } from "../../components/PrivateRoute";
-import Arena from "../Arena";
+import Arena from "../arena/index";
 
 const ProtectedArena = () => (
   <PrivateRoute requireClassChosen>
