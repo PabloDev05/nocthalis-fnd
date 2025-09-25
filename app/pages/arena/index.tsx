@@ -20,7 +20,7 @@ import {
 import { asInt, extractStamina, skillText } from "./helpers";
 import { buildAnimationSchedule } from "./scheduler";
 
-// vistas nuevas
+// vistas
 import { SelectView } from "./views/SelectView";
 import { DuelView } from "./views/DuelView";
 
@@ -94,6 +94,20 @@ export default function Arena() {
   const [blockBumpLeft, setBlockBumpLeft] = useState(0);
   const [blockBumpRight, setBlockBumpRight] = useState(0);
 
+  // NUEVO: FX de estado (pulso sobre la barra de vida)
+  const [statusFlashLeft, setStatusFlashLeft] = useState(0);
+  const [statusFlashRight, setStatusFlashRight] = useState(0);
+  const [statusVariantLeft, setStatusVariantLeft] = useState<
+    "cc" | "debuff" | "bleed" | null
+  >(null);
+  const [statusVariantRight, setStatusVariantRight] = useState<
+    "cc" | "debuff" | "bleed" | null
+  >(null);
+
+  // NUEVO: nudge lateral cuando hay MISS
+  const [missNudgeLeft, setMissNudgeLeft] = useState(0);
+  const [missNudgeRight, setMissNudgeRight] = useState(0);
+
   // skills + dmg ranges
   const [myPassiveText, setMyPassiveText] = useState<string | null>(null);
   const [myUltText, setMyUltText] = useState<string | null>(null);
@@ -115,7 +129,6 @@ export default function Arena() {
 
   async function refillStamina() {
     try {
-      // si conocemos el max del contexto, lo usamos; si no, pedimos snapshot primero
       let max = staminaMax;
       if (!max || !Number.isFinite(max)) {
         const s0 = await client.get("/stamina");
@@ -123,21 +136,15 @@ export default function Arena() {
         setStamina(snap0.current, snap0.max);
         max = snap0.max;
       }
-
-      // setear a tope con endpoint admin
       await client.post("/stamina/admin/set", { value: Number(max ?? 100) });
-
-      // refrescar snapshot para reflejar la UI
       const s1 = await client.get("/stamina");
       const snap1 = extractStamina(s1.data);
       setStamina(snap1.current, snap1.max);
     } catch (e: any) {
-      // si no hay permisos/admin, al menos refrescamos
       try {
         const s = await client.get("/stamina");
         const snap = extractStamina(s.data);
         setStamina(snap.current, snap.max);
-        // feedback útil
         setErr(
           "No se pudo usar /stamina/admin/set (¿sin permiso?). Se refrescó la estamina."
         );
@@ -283,6 +290,16 @@ export default function Arena() {
       setOppUltText("—");
       setMyDmgRange(null);
       setOppDmgRange(null);
+
+      // reset de status FX
+      setStatusFlashLeft(0);
+      setStatusFlashRight(0);
+      setStatusVariantLeft(null);
+      setStatusVariantRight(null);
+
+      // reset de nudge por MISS
+      setMissNudgeLeft(0);
+      setMissNudgeRight(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, selectedId, myMaxHP, selectedOpp?.maxHP]);
@@ -293,6 +310,7 @@ export default function Arena() {
   function playScheduled(timeline: TimelineBE[]) {
     const schedule = buildAnimationSchedule(timeline);
     if (!schedule.events.length) return 0;
+
     let playerHP = myMaxHP;
     let enemyHP = asInt(selectedOpp?.maxHP || 0);
     setHpMe(playerHP);
@@ -302,10 +320,13 @@ export default function Arena() {
       const t = window.setTimeout(() => {
         const p = ev.payload;
         const turn = p.turn;
-        const actorIsPlayer = isPlayerRole(ev.role, turn);
+
+        // El actor se determina por el role del evento
+        const actorIsPlayer = ev.role === "attacker";
+
         const who = actorIsPlayer ? myName : (selectedOpp?.name ?? "—");
         const tgt = actorIsPlayer ? (selectedOpp?.name ?? "—") : myName;
-        const dmg = Math.max(0, asInt(p.damage ?? 0));
+        const dmg = Math.max(0, asInt((p as any).damage ?? 0));
 
         const pushLog = (kind: LogEntry["kind"], text: string) =>
           setCombatLog((prev) =>
@@ -317,6 +338,44 @@ export default function Arena() {
               value: dmg,
             })
           );
+
+        if ((ev as any).type === "status_applied") {
+          const s = (p as any).statusApplied;
+          if (s) {
+            const victimIsActor = s.target === "attacker";
+            const victimIsPlayer = victimIsActor
+              ? actorIsPlayer
+              : !actorIsPlayer;
+
+            const variant: "cc" | "debuff" | "bleed" =
+              s.key === "fear" || s.key === "silence"
+                ? "cc"
+                : s.key === "bleed"
+                  ? "bleed"
+                  : "debuff";
+
+            if (victimIsPlayer) {
+              setStatusVariantLeft(variant);
+              setStatusFlashLeft((x) => x + 1);
+            } else {
+              setStatusVariantRight(variant);
+              setStatusFlashRight((x) => x + 1);
+            }
+
+            const durTxt = s.duration ? ` for ${asInt(s.duration)}t` : "";
+            const valTxt =
+              s.dotPerTurn != null
+                ? ` (${asInt(s.dotPerTurn)}/t)`
+                : s.value != null
+                  ? ` (${asInt(s.value)})`
+                  : "";
+            pushLog(
+              "hit",
+              `${who} inflicts ${String(s.key).toUpperCase()} on ${tgt}${durTxt}${valTxt}.`
+            );
+          }
+          return;
+        }
 
         if (ev.type === "passive_proc") {
           if (actorIsPlayer) {
@@ -355,11 +414,26 @@ export default function Arena() {
             setUltShakeLeft((x) => x + 1);
           }
           const ultName = p.ability?.name ?? "Ultimate";
+          const u = (p as any).ultimate;
+          const bonusTxt = u?.bonusDamagePercent
+            ? ` (+${asInt(u.bonusDamagePercent)}%)`
+            : "";
+          const debTxt = u?.debuff?.key
+            ? `, applies ${String(u.debuff.key).toUpperCase()}${
+                u.debuff.duration ? ` for ${asInt(u.debuff.duration)}t` : ""
+              }${
+                u.debuff.value != null
+                  ? ` (${asInt(u.debuff.value)})`
+                  : u.debuff.dotPerTurn != null
+                    ? ` (${asInt(u.debuff.dotPerTurn)}/t)`
+                    : ""
+              }`
+            : "";
           pushLog(
             "ultimate",
             dmg > 0
-              ? `${who} unleashes ${ultName} on ${tgt} for ${dmg}!`
-              : `${who} unleashes ${ultName}.`
+              ? `${who} unleashes ${ultName}${bonusTxt} on ${tgt} for ${dmg}!${debTxt}`
+              : `${who} unleashes ${ultName}${bonusTxt}.${debTxt ? debTxt : ""}`
           );
           if (dmg > 0) {
             if (actorIsPlayer) enemyHP = Math.max(0, enemyHP - dmg);
@@ -371,6 +445,17 @@ export default function Arena() {
         }
 
         if (ev.type === "dot_tick") {
+          const dotKey = (p as any).dotKey ?? (p as any).key ?? null;
+          if (dotKey === "bleed") {
+            if (actorIsPlayer) {
+              setStatusVariantRight("bleed");
+              setStatusFlashRight((k) => k + 1);
+            } else {
+              setStatusVariantLeft("bleed");
+              setStatusFlashLeft((k) => k + 1);
+            }
+          }
+
           if (dmg > 0) {
             if (actorIsPlayer) {
               enemyHP = Math.max(0, enemyHP - dmg);
@@ -419,14 +504,44 @@ export default function Arena() {
             setBlockFlashLeft((x) => x + 1);
             setBlockBumpLeft((x) => x + 1);
           }
+
+          // Mostrar bloqueado si viene del BE
+          const tagBlocked =
+            typeof (p as any)?.tags === "object"
+              ? asInt((p as any).tags.blockedAmount)
+              : undefined;
+          const blockedRaw =
+            (p as any)?.breakdown?.blockedAmount ??
+            (p as any)?.blockedAmount ??
+            tagBlocked ??
+            (() => {
+              const raw =
+                (p as any)?.rawDamage ??
+                (p as any)?.damageRaw ??
+                (p as any)?.intendedDamage;
+              return Number.isFinite(raw) &&
+                asInt(raw) > asInt((p as any).damage)
+                ? asInt(raw) - asInt((p as any).damage)
+                : undefined;
+            })();
+
+          const blockedTxt =
+            Number.isFinite(blockedRaw) && asInt(blockedRaw as number) > 0
+              ? `${asInt(blockedRaw as number)} blocked, `
+              : "";
+
           pushLog(
             "block",
-            `BLOCKED! ${tgt} stops ${who}'s strike (only ${dmg} through).`
+            `BLOCKED! ${tgt} stops ${who}'s strike (${blockedTxt}only ${dmg} through).`
           );
           return;
         }
 
         if (ev.type === "impact_miss") {
+          // NUEVO: el objetivo hace un “nudge” lateral (dodge)
+          if (actorIsPlayer) setMissNudgeRight((k) => k + 1);
+          else setMissNudgeLeft((k) => k + 1);
+
           pushLog("miss", `MISSED! ${who} fails to connect.`);
           return;
         }
@@ -492,10 +607,15 @@ export default function Arena() {
     setOppUltText("—");
     setMyDmgRange(null);
     setOppDmgRange(null);
+    setStatusFlashLeft(0);
+    setStatusFlashRight(0);
+    setStatusVariantLeft(null);
+    setStatusVariantRight(null);
+    // NUEVO: reset de miss nudge
+    setMissNudgeLeft(0);
+    setMissNudgeRight(0);
 
-    idemKeyRef.current = `${selectedOpp.id}:${Date.now()}:${Math.random()
-      .toString(36)
-      .slice(2)}`;
+    idemKeyRef.current = `${selectedOpp.id}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 
     try {
       const crt = await client.post(
@@ -861,6 +981,14 @@ export default function Arena() {
                   hitShakeRight={hitShakeRight}
                   blockBumpLeft={blockBumpLeft}
                   blockBumpRight={blockBumpRight}
+                  // NUEVO: status FX
+                  statusFlashLeft={statusFlashLeft}
+                  statusFlashRight={statusFlashRight}
+                  statusVariantLeft={statusVariantLeft}
+                  statusVariantRight={statusVariantRight}
+                  // NUEVO: miss nudge
+                  missNudgeLeft={missNudgeLeft}
+                  missNudgeRight={missNudgeRight}
                   // results
                   duelResult={duelResult}
                   rewards={rewards}

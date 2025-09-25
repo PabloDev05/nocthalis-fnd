@@ -1,3 +1,4 @@
+// app/pages/gameInterface/components/ClassSkillsCard.tsx
 import { Flame, Shield } from "lucide-react";
 
 export default function ClassSkillsCard({ data }: { data: any }) {
@@ -6,6 +7,9 @@ export default function ClassSkillsCard({ data }: { data: any }) {
       <h3 className="stat-text font-semibold mb-3 flex items-center text-base">
         <Flame className="w-4 h-4 mr-2 text-accent" /> Class Skills
       </h3>
+
+      {/* ⭐ Divisoria debajo del título */}
+      <div className="mt-2 mb-3 h-px w-full bg-[var(--border)]/80" />
 
       {/* Passive */}
       {((data as any)?.passiveDefaultSkill ??

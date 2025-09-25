@@ -1,8 +1,9 @@
+// src/pages/arena/scheduler.ts
 import { ActorRole, ScheduleOptions, ScheduledEvent, ScheduledEventType, TimelineBE } from "./types";
-import { normalizeEvent } from "./helpers"; // ✅ ruta corregida
+import { normalizeEvent, enrichTimelinePayload } from "./helpers";
 
 const DEFAULTS: ScheduleOptions = {
-  minTurnMs: 1100,
+  minTurnMs: 1150, // ← un poquito más largo para que el rival se “vea”
   gapSmallMs: 120,
   passiveProcMs: 520,
   ultimateCastMs: 920,
@@ -41,7 +42,8 @@ export function buildAnimationSchedule(timeline: TimelineBE[], opts?: Partial<Sc
   };
 
   for (let i = 0; i < timeline.length; i++) {
-    const raw = timeline[i];
+    const raw0 = timeline[i];
+    const raw = enrichTimelinePayload(raw0);
     const next = timeline[i + 1];
 
     if (raw.turn !== lastTurn) {
@@ -55,7 +57,6 @@ export function buildAnimationSchedule(timeline: TimelineBE[], opts?: Partial<Sc
     const role: ActorRole = (raw.source ?? raw.actor ?? "attacker") as ActorRole;
     const n = normalizeEvent(raw);
 
-    // Eventos “previos” al impacto
     if (n === "passive_proc") {
       schedule("passive_proc", role, cfg.passiveProcMs, raw);
       tCursor += cfg.gapSmallMs;
@@ -66,17 +67,19 @@ export function buildAnimationSchedule(timeline: TimelineBE[], opts?: Partial<Sc
       tCursor += cfg.gapSmallMs;
       continue;
     }
+    if (n === "status_applied") {
+      schedule("status_applied", role, Math.max(260, cfg.gapSmallMs + 100), raw);
+      tCursor += cfg.gapSmallMs;
+      continue;
+    }
     if (n === "dot_tick") {
-      // DoT es corto y no “ocupa” toda la ventana
       schedule("dot_tick", role, Math.max(220, cfg.gapSmallMs + 80), raw);
       continue;
     }
 
-    // Ataque normal
     schedule("attack_windup", role, cfg.attackWindupMs, raw);
     schedule(deriveImpact(raw), role, cfg.impactMs, raw);
 
-    // Asegurar duración mínima por turno
     if (!next || next.turn !== raw.turn) {
       const minEnd = turnStart + cfg.minTurnMs;
       if (tCursor < minEnd) tCursor = minEnd;

@@ -1,3 +1,4 @@
+// app/pages/gameInterface/components/ResistancesCard.tsx
 import { ShieldPlus } from "lucide-react";
 import { CharacterApi } from "../../../../types/character";
 import { asInt, labelize } from "../lib/statUtils";
@@ -30,6 +31,10 @@ export default function ResistancesCard({
         <ShieldPlus className="w-4 h-4 mr-2 text-accent" />
         Resistances
       </h3>
+
+      {/* ⭐ Divisoria debajo del título */}
+      <div className="mt-2 mb-3 h-px w-full bg-[var(--border)]/80" />
+
       <div className="grid grid-cols-2 gap-2.5">
         {ORDERED.map((k) => (
           <div key={String(k)} className="flex justify-between items-center">

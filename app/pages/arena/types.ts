@@ -1,25 +1,49 @@
+// src/pages/Arena/types.ts
+
 import type { CombatStats, CharacterApi } from "../../../types/character";
 
 export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3030/api";
 export const PVP_STAMINA_COST = Number(import.meta.env.VITE_PVP_STAMINA_COST ?? 10) || 10;
 
 export type ActorRole = "attacker" | "defender";
-export type TimelineEvent = "hit" | "crit" | "block" | "miss" | "passive_proc" | "ultimate_cast" | "dot_tick";
 
+/** ← añadimos "status_applied" */
+export type TimelineEvent = "hit" | "crit" | "block" | "miss" | "passive_proc" | "ultimate_cast" | "dot_tick" | "status_applied";
+
+/** añadimos type?: string y statusApplied? para compat */
 export type TimelineBE = {
   turn: number;
-  source?: ActorRole;
-  actor?: ActorRole;
+  source?: ActorRole | "player" | "enemy";
+  actor?: ActorRole | "player" | "enemy";
+
+  /** BE a veces envía 'type' además de 'event'/'outcome' */
+  type?: string;
+  event: string | TimelineEvent;
+  outcome?: string;
+
   damage?: number;
   attackerHP?: number;
   defenderHP?: number;
-  event: string | TimelineEvent;
+
   ability?: {
     kind: "passive" | "ultimate";
     name?: string;
     description?: string;
     durationTurns?: number;
   };
+
+  /** opcional: payload normalizado cuando llega por tags */
+  statusApplied?: {
+    key?: string;
+    target?: ActorRole | "player" | "enemy" | "attacker" | "defender";
+    duration?: number;
+    durationTurns?: number;
+    cc?: boolean;
+    value?: number;
+    dotPerTurn?: number;
+    stacks?: number;
+  };
+
   tags?: string[] | Record<string, any>;
 
   // alias/flags que pueden venir del backend
@@ -41,10 +65,9 @@ export type TimelineBE = {
   bleed?: boolean;
   poison?: boolean;
   burn?: boolean;
-
-  outcome?: string;
 };
 
+/** igual que antes */
 export type ScheduleOptions = {
   minTurnMs: number;
   gapSmallMs: number;
@@ -57,7 +80,8 @@ export type ScheduleOptions = {
   extraMissMs: number;
 };
 
-export type ScheduledEventType = "attack_windup" | "impact_hit" | "impact_crit" | "impact_block" | "impact_miss" | "passive_proc" | "ultimate_cast" | "dot_tick";
+/** añadimos 'status_applied' para el scheduler */
+export type ScheduledEventType = "attack_windup" | "impact_hit" | "impact_crit" | "impact_block" | "impact_miss" | "passive_proc" | "ultimate_cast" | "dot_tick" | "status_applied";
 
 export type ScheduledEvent = {
   id: string;
@@ -107,7 +131,9 @@ export type Reward = {
   honor?: number;
 } | null;
 
-export type LogKind = "hit" | "crit" | "block" | "miss" | "passive" | "ultimate" | "dot";
+/** 👇 añadimos "status" a LogKind */
+export type LogKind = "hit" | "crit" | "block" | "miss" | "passive" | "ultimate" | "dot" | "status";
+
 export type LogEntry = {
   turn: number;
   kind: LogKind;

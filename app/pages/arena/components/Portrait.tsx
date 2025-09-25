@@ -1,8 +1,7 @@
 import { User } from "lucide-react";
 import { asInt } from "../helpers";
-import { SkillBadge } from "./Badges";
 import { SmallMetricsCard } from "./Metrics";
-import { useState, useEffect } from "react";
+import { useState, useEffect, CSSProperties } from "react";
 
 export function BattlePortrait({
   side,
@@ -21,6 +20,11 @@ export function BattlePortrait({
   ultShakeKey,
   hitShakeKey,
   blockBumpKey,
+  /** 👇 NUEVO: FX de status/debuff en la barra */
+  statusFlashKey,
+  statusVariant,
+  /** 👇 NUEVO: nudge lateral al esquivar (miss) */
+  missNudgeKey,
   stats,
   widthClass,
 }: {
@@ -40,6 +44,11 @@ export function BattlePortrait({
   ultShakeKey: number;
   hitShakeKey: number;
   blockBumpKey: number;
+  /** "cc" | "debuff" | "bleed" | null */
+  statusVariant?: "cc" | "debuff" | "bleed" | null;
+  statusFlashKey?: number;
+  /** NUEVO */
+  missNudgeKey: number;
   stats: Record<string, number | undefined>;
   widthClass: string;
 }) {
@@ -49,15 +58,19 @@ export function BattlePortrait({
   const BUMP_FX_DURATION = 380;
   const HIT_SHAKE_DURATION = 420;
   const ULT_SHAKE_DURATION = 750;
+  const STATUS_FX_DURATION = 900;
+  const MISS_NUDGE_DURATION = 260;
 
-  // Estados locales para que los FX SIEMPRE terminen y no “queden pintados”
+  // Estados locales para que los FX SIEMPRE terminen
   const [showBlockFx, setShowBlockFx] = useState(false);
   const [showCritFx, setShowCritFx] = useState(false);
   const [showHitShake, setShowHitShake] = useState(false);
   const [showUltShake, setShowUltShake] = useState(false);
   const [showBlockBump, setShowBlockBump] = useState(false);
+  const [showStatusFx, setShowStatusFx] = useState(false);
+  const [showMissNudge, setShowMissNudge] = useState(false);
 
-  // BLOQUEO → FX temporal
+  // BLOQUEO
   useEffect(() => {
     if (blockFlashKey > 0) {
       setShowBlockFx(true);
@@ -69,7 +82,7 @@ export function BattlePortrait({
     }
   }, [blockFlashKey]);
 
-  // CRIT → FX temporal
+  // CRIT (usamos hitShakeKey como señal)
   useEffect(() => {
     if (hitShakeKey > 0) {
       setShowCritFx(true);
@@ -81,7 +94,7 @@ export function BattlePortrait({
     }
   }, [hitShakeKey]);
 
-  // HIT SHAKE → temblor corto en impacto
+  // HIT SHAKE
   useEffect(() => {
     if (hitShakeKey > 0) {
       setShowHitShake(true);
@@ -93,7 +106,7 @@ export function BattlePortrait({
     }
   }, [hitShakeKey]);
 
-  // ULT SHAKE → temblor más largo
+  // ULT SHAKE
   useEffect(() => {
     if (ultShakeKey > 0) {
       setShowUltShake(true);
@@ -105,7 +118,7 @@ export function BattlePortrait({
     }
   }, [ultShakeKey]);
 
-  // BLOCK BUMP → bump suave del card
+  // BLOCK BUMP
   useEffect(() => {
     if (blockBumpKey > 0) {
       setShowBlockBump(true);
@@ -117,10 +130,58 @@ export function BattlePortrait({
     }
   }, [blockBumpKey]);
 
+  // STATUS FX (cc/debuff/bleed)
+  useEffect(() => {
+    if ((statusFlashKey ?? 0) > 0) {
+      setShowStatusFx(true);
+      const id = window.setTimeout(
+        () => setShowStatusFx(false),
+        STATUS_FX_DURATION
+      );
+      return () => window.clearTimeout(id);
+    }
+  }, [statusFlashKey]);
+
+  // MISS NUDGE (empujón lateral)
+  useEffect(() => {
+    if (missNudgeKey > 0) {
+      setShowMissNudge(true);
+      const id = window.setTimeout(
+        () => setShowMissNudge(false),
+        MISS_NUDGE_DURATION
+      );
+      return () => window.clearTimeout(id);
+    }
+  }, [missNudgeKey]);
+
   const pct = Math.max(
     0,
     Math.min(100, Math.round((hp / Math.max(1, maxHP)) * 100))
   );
+
+  // Colores base de HP
+  const HP_BG =
+    "linear-gradient(90deg, rgba(45,8,12,.95) 0%, rgba(85,14,20,.95) 40%, rgba(120,18,26,.95) 70%, rgba(150,22,30,.98) 100%)";
+
+  // Overlay para status
+  const statusOverlay =
+    statusVariant === "cc"
+      ? "radial-gradient(ellipse at center, rgba(160,140,255,.28) 0%, rgba(110,90,220,.18) 40%, rgba(0,0,0,0) 70%)"
+      : statusVariant === "debuff"
+        ? "radial-gradient(ellipse at center, rgba(160,120,255,.22) 0%, rgba(120,90,220,.14) 40%, rgba(0,0,0,0) 70%)"
+        : statusVariant === "bleed"
+          ? "radial-gradient(ellipse at center, rgba(255,60,60,.26) 0%, rgba(180,30,30,.16) 40%, rgba(0,0,0,0) 70%)"
+          : "none";
+
+  // Style combinado para shake de ultimate + variable del nudge
+  const wrapperStyle: CSSProperties = {
+    ...(showUltShake
+      ? { animation: "megaShake 750ms cubic-bezier(.36,.07,.19,.97) 1" }
+      : {}),
+    // Dirección del nudge: izquierda se mueve un poco a la derecha, derecha a la izquierda
+    // @ts-ignore: CSS var
+    ["--dx" as any]: side === "left" ? "6px" : "-6px",
+  };
 
   return (
     <div
@@ -128,25 +189,14 @@ export function BattlePortrait({
                   bg-gradient-to-b from-[rgba(35,38,55,.96)] to-[rgba(15,16,22,.98)]
                   shadow-[inset_0_1px_0_rgba(255,255,255,.05),0_20px_40px_rgba(0,0,0,.55),0_0_24px_rgba(120,120,255,.12)]
                   overflow-hidden ${side === "left" ? "ml-auto" : "mr-auto"}
-                  ${showBlockBump ? "block-bump-once" : ""}`}
-      style={
-        showUltShake
-          ? { animation: "megaShake 750ms cubic-bezier(.36,.07,.19,.97) 1" }
-          : undefined
-      }
+                  ${showBlockBump ? "block-bump-once" : ""} ${showMissNudge ? "miss-nudge-once" : ""}`}
+      style={wrapperStyle}
     >
       <style>{`
-        @keyframes shieldAppear {
-          0%   { transform: scale(0.86); opacity: 0; }
-          40%  { transform: scale(1.08); opacity: 1; }
-          100% { transform: scale(1.0); opacity: 0; }
-        }
-
-        @keyframes hpGlow {
-          0%{box-shadow:inset 0 0 0 0 rgba(255,80,80,0),0 0 0 rgba(0,0,0,0)}
+        @keyframes shieldAppear { 0%{transform:scale(.86);opacity:0}40%{transform:scale(1.08);opacity:1}100%{transform:scale(1.0);opacity:0} }
+        @keyframes hpGlow { 0%{box-shadow:inset 0 0 0 0 rgba(255,80,80,0),0 0 0 rgba(0,0,0,0)}
           30%{box-shadow:inset 0 0 24px rgba(255,90,90,.45),0 0 16px rgba(255,60,60,.35)}
-          100%{box-shadow:inset 0 0 0 0 rgba(255,80,80,0),0 0 0 rgba(0,0,0,0)}
-        }
+          100%{box-shadow:inset 0 0 0 0 rgba(255,80,80,0),0 0 0 rgba(0,0,0,0)} }
         .hp-glow-once { animation: hpGlow 800ms ease-out 1; }
 
         @keyframes critCardFlash {
@@ -165,12 +215,8 @@ export function BattlePortrait({
         }
         @keyframes shieldRipple { 0%{transform:scale(.9);opacity:.4} 100%{transform:scale(1.5);opacity:0} }
 
-        @keyframes megaShake {
-          10%,90%{transform:translate3d(-1px,0,0)}
-          20%,80%{transform:translate3d(2px,0,0)}
-          30%,50%,70%{transform:translate3d(-4px,0,0)}
-          40%,60%{transform:translate3d(4px,0,0)}
-        }
+        @keyframes megaShake { 10%,90%{transform:translate3d(-1px,0,0)} 20%,80%{transform:translate3d(2px,0,0)}
+          30%,50%,70%{transform:translate3d(-4px,0,0)} 40%,60%{transform:translate3d(4px,0,0)} }
 
         @keyframes hitShake {
           0%,100%{transform:translate3d(0,0,0)}
@@ -191,43 +237,28 @@ export function BattlePortrait({
           100%{box-shadow:inset 0 0 0 rgba(0,0,0,0)}
         }
 
-        /* anillo single (compat) */
-        .block-ring-single {
-          position: absolute; inset: 0; pointer-events: none;
-          display: flex; align-items: center; justify-content: center;
-        }
-        .block-ring-single > span {
-          width: 160px; height: 160px; border-radius: 9999px;
-          border: 2px solid rgba(120,180,255,.55);
-          box-shadow: 0 0 18px rgba(120,180,255,.35);
-          animation: ringFlash 420ms ease-out 1;
-        }
-        @keyframes ringFlash {
-          0%{opacity:0; transform:scale(.92); box-shadow:0 0 0 rgba(120,180,255,0)}
-          25%{opacity:1; box-shadow:0 0 24px rgba(120,180,255,.55)}
-          100%{opacity:1; transform:scale(1); box-shadow:0 0 0 rgba(120,180,255,0)}
+        /* Status pulse sobre la barra */
+        @keyframes statusPulse {
+          0%{opacity:0; transform:scaleX(.98)}
+          25%{opacity:.9; transform:scaleX(1)}
+          60%{opacity:.4}
+          100%{opacity:0; transform:scaleX(1)}
         }
 
-        .block-label{
-          position:absolute; top:12px; left:50%; transform:translateX(-50%);
-          padding:2px 8px; border-radius:6px; font-weight:900; font-size:11px;
-          letter-spacing:.5px; text-transform:uppercase; color:#dbeafe;
-          background:linear-gradient(180deg,rgba(30,60,120,.55),rgba(20,40,90,.55));
-          box-shadow:0 0 10px rgba(120,180,255,.35), inset 0 0 8px rgba(120,180,255,.15);
-          animation:blockWobble 480ms ease-out 1;
+        /* NUEVO: empujón lateral para miss (usa la var --dx) */
+        @keyframes missNudge {
+          0%{ transform: translateX(0) }
+          35%{ transform: translateX(var(--dx)) }
+          100%{ transform: translateX(0) }
         }
-        @keyframes blockWobble {
-          0%{transform:translateX(-50%) scale(.96)}
-          35%{transform:translateX(-50%) scale(1.06)}
-          100%{transform:translateX(-50%) scale(1)}
-        }
+        .miss-nudge-once { animation: missNudge 260ms ease-out 1; }
       `}</style>
 
       <div className="h-9 flex items-center justify-center text-[11px] font-extrabold text-white tracking-wide bg-gradient-to-r from-[rgba(120,120,255,.16)] via-[rgba(120,120,255,.25)] to-[rgba(120,120,255,.16)] border-b border-[var(--border)] uppercase">
         Level {level}
       </div>
 
-      {/* Avatar area (tiembla en BLOCK o CRIT) */}
+      {/* Avatar area */}
       <div
         className={`h-[160px] flex items-center justify-center relative ${showHitShake ? "hit-shake-once" : ""}`}
       >
@@ -241,7 +272,7 @@ export function BattlePortrait({
           <User className="w-16 h-16 text-gray-400" />
         )}
 
-        {/* BLOQUEO – escudo + ripple, auto-hide */}
+        {/* BLOQUEO – escudo + ripple */}
         {showBlockFx && (
           <>
             <div
@@ -299,7 +330,7 @@ export function BattlePortrait({
           />
         )}
 
-        {/* CRÍTICO – brillo rojo temporal (no queda un punto suelto) */}
+        {/* CRÍTICO */}
         {showCritFx && (
           <div
             className="absolute inset-0 pointer-events-none"
@@ -315,6 +346,7 @@ export function BattlePortrait({
         <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_80px_rgba(0,0,0,.55)]" />
       </div>
 
+      {/* Nombre */}
       <div className="px-3 py-2 border-t border-[var(--border)] bg-[rgba(255,255,255,.03)] text-center">
         <div
           className="text-white font-black truncate text-base tracking-wide drop-shadow-[0_1px_0_rgba(255,255,255,.2)]"
@@ -325,23 +357,7 @@ export function BattlePortrait({
         </div>
       </div>
 
-      <div className="px-3 pt-1">
-        <SkillBadge
-          title="Passive"
-          text={passiveText ?? "—"}
-          kind="passive"
-          pulseKey={passivePulseKey}
-          fate={stats["fate"] ?? 0}
-        />
-        <SkillBadge
-          title="Ultimate"
-          text={ultimateText ?? "—"}
-          kind="ultimate"
-          pulseKey={ultimatePulseKey}
-          fate={stats["fate"] ?? 0}
-        />
-      </div>
-
+      {/* HP BAR */}
       <div className="mt-[2px]">
         <div
           className={`h-7 border-y border-[var(--border)] bg-[rgba(255,255,255,.03)] overflow-hidden relative ${
@@ -353,13 +369,23 @@ export function BattlePortrait({
             className="h-full transition-[width] duration-500"
             style={{
               width: `${pct}%`,
-              background:
-                "linear-gradient(90deg, rgba(45,8,12,.95) 0%, rgba(85,14,20,.95) 40%, rgba(120,18,26,.95) 70%, rgba(150,22,30,.98) 100%)",
+              background: HP_BG,
               boxShadow:
                 "0 0 6px rgba(180,40,40,.28), inset 0 0 8px rgba(0,0,0,.75)",
               filter: "brightness(.88)",
             }}
           />
+          {/* Overlay de STATUS sobre la barra */}
+          {showStatusFx && statusOverlay !== "none" && (
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                animation: "statusPulse 900ms ease-out 1",
+                background: statusOverlay,
+                mixBlendMode: "screen",
+              }}
+            />
+          )}
           <div className="absolute inset-0 flex items-center justify-center text-[11px] text-white/95 font-semibold tracking-wide">
             {asInt(hp)} / {asInt(maxHP)} HP
           </div>

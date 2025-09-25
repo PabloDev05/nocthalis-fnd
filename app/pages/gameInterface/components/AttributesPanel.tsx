@@ -125,22 +125,31 @@ export default function AttributesPanel({
     return { label: "", value: "", glow: false } as any;
   }
 
-  const lockAll = !!allocating || !canAllocate || (availablePoints ?? 0) <= 0;
+  const hasPoints = Math.max(0, availablePoints ?? 0) > 0; // ⭐
+  const lockAll = !!allocating;
 
   return (
     <div className="card-muted p-3 md:p-4">
+      {/* ── Header ── */}
       <div className="flex items-center mb-3">
         <span className="text-white font-semibold text-sm flex items-center">
           <Zap className="w-4 h-4 mr-2 text-accent" /> Attributes
         </span>
-        <span className="ml-auto text-[10px] px-2 py-0.5 rounded bg-white/10 border border-[var(--border)] text-zinc-200">
-          {Math.max(0, availablePoints)} pts
-        </span>
+        {/* Badge solo si hay puntos */}
+        {hasPoints && (
+          <span className="ml-auto text-[10px] px-2 py-0.5 rounded bg-white/10 border border-[var(--border)] text-zinc-200">
+            {availablePoints} pts
+          </span>
+        )}
       </div>
+      {/* ⭐ Divisoria debajo del título */}
+      <div className="mt-2 mb-3 h-px w-full bg-[var(--border)]/80" />
+      {/* ⭐ */}
 
+      {/* ── Body ── */}
       <div className="grid grid-cols-2 gap-x-6 gap-y-3">
         {rows.map((statKey, idx) => {
-          const statVal = readStat(data, String(statKey)); // << antes readStatSafe
+          const statVal = readStat(data, String(statKey));
           const statGlow = (glowStats as any)[String(statKey)];
           const r = rightForRow(statKey, idx);
 
@@ -152,22 +161,27 @@ export default function AttributesPanel({
                 </span>
                 <div className="flex items-center gap-2">
                   <span
-                    className={`text-white font-bold ${statGlow ? "stat-glow" : ""}`}
+                    className={`text-white font-bold ${
+                      statGlow ? "stat-glow" : ""
+                    }`}
                   >
                     {statVal}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      !lockAll &&
-                      allocateOne(statKey as keyof CharacterApi["stats"])
-                    }
-                    disabled={lockAll}
-                    className="w-6 h-6 inline-flex items-center justify-center rounded-md border border-[var(--border)] text-white/90 hover:bg-white/10 disabled:opacity-50"
-                    title="Allocate 1 point"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Botón “+” solo si hay puntos y está permitido */}
+                  {hasPoints && canAllocate && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        !lockAll &&
+                        allocateOne(statKey as keyof CharacterApi["stats"])
+                      }
+                      disabled={lockAll}
+                      className="w-6 h-6 inline-flex items-center justify-center rounded-md border border-[var(--border)] text-white/90 hover:bg-white/10 disabled:opacity-50"
+                      title="Allocate 1 point"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -177,7 +191,9 @@ export default function AttributesPanel({
                     <>
                       <span className="text-gray-300 text-xs">{r.label}</span>
                       <span
-                        className={`text-accent font-bold text-xs text-right ${r.glow ? "stat-glow" : ""}`}
+                        className={`text-accent font-bold text-xs text-right ${
+                          r.glow ? "stat-glow" : ""
+                        }`}
                       >
                         {r.value}
                         {r.tail && (

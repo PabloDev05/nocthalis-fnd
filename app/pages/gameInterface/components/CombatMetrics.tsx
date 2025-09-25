@@ -1,3 +1,4 @@
+// app/pages/gameInterface/components/CombatMetrics.tsx
 import { BarChart2 } from "lucide-react";
 import Tooltip from "./Tooltip";
 import useGlowOnChange from "../hooks/useGlowOnChange";
@@ -36,6 +37,9 @@ export default function CombatMetrics({ data }: { data: CharacterApi | null }) {
         Combat Metrics
       </h3>
 
+      {/* ⭐ Divisoria debajo del título */}
+      <div className="mt-2 mb-3 h-px w-full bg-[var(--border)]/80" />
+
       <div className="grid grid-cols-2 gap-2.5">
         {KEYS.map((k) => (
           <div key={String(k)} className="flex justify-between items-center">
@@ -45,7 +49,9 @@ export default function CombatMetrics({ data }: { data: CharacterApi | null }) {
               </span>
             </Tooltip>
             <span
-              className={`text-accent font-bold text-xs ${glow[String(k)] ? "stat-glow" : ""}`}
+              className={`text-accent font-bold text-xs ${
+                glow[String(k)] ? "stat-glow" : ""
+              }`}
             >
               {asInt(cs?.[k] ?? 0)}
             </span>

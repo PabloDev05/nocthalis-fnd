@@ -1,7 +1,6 @@
 import { RotateCcw } from "lucide-react";
 import { BattlePortrait } from "../components/Portrait";
 import { CombatLog, RewardsPanel } from "../components/LogsAndRewards";
-import { asInt } from "../helpers";
 import { Opponent, Reward, DuelResult, LogEntry, CharacterApi } from "../types";
 import { resolvePrimaryCombatKey } from "../../../lib/primary";
 
@@ -48,6 +47,16 @@ type Props = {
   blockBumpLeft: number;
   blockBumpRight: number;
 
+  // NUEVO: pulso de estado (cc/debuff/bleed) en barra de vida
+  statusFlashLeft: number;
+  statusFlashRight: number;
+  statusVariantLeft?: "cc" | "debuff" | "bleed" | null;
+  statusVariantRight?: "cc" | "debuff" | "bleed" | null;
+
+  // NUEVO: nudge al esquivar (miss)
+  missNudgeLeft: number;
+  missNudgeRight: number;
+
   // results
   duelResult: DuelResult;
   rewards: Reward;
@@ -90,6 +99,12 @@ export function DuelView(props: Props) {
     hitShakeRight,
     blockBumpLeft,
     blockBumpRight,
+    statusFlashLeft,
+    statusFlashRight,
+    statusVariantLeft,
+    statusVariantRight,
+    missNudgeLeft,
+    missNudgeRight,
     duelResult,
     rewards,
     combatLog,
@@ -122,12 +137,14 @@ export function DuelView(props: Props) {
           ultimateText={myUltText ?? "—"}
           passivePulseKey={pulseLeftPassive}
           ultimatePulseKey={pulseLeftUlt}
-          blockFlashKey={blockFlashLeft}
-          blockBumpKey={blockBumpLeft}
           hpGlowKey={hpGlowLeft}
+          blockFlashKey={blockFlashLeft}
           ultFlashKey={ultFlashLeft}
           ultShakeKey={ultShakeLeft}
           hitShakeKey={hitShakeLeft}
+          blockBumpKey={blockBumpLeft}
+          // NUEVO: nudge lateral al miss
+          missNudgeKey={missNudgeLeft}
           stats={{
             damageMin: myDmgRange?.min ?? (me as any)?.uiDamageMin ?? 0,
             damageMax: myDmgRange?.max ?? (me as any)?.uiDamageMax ?? 0,
@@ -152,6 +169,9 @@ export function DuelView(props: Props) {
               0,
             fate: (me as any)?.stats?.fate ?? 0,
           }}
+          // 👇 Estado sobre la HP bar
+          statusFlashKey={statusFlashLeft}
+          statusVariant={statusVariantLeft ?? null}
         />
 
         {/* VS + Rewards */}
@@ -212,6 +232,8 @@ export function DuelView(props: Props) {
           ultShakeKey={ultShakeRight}
           hitShakeKey={hitShakeRight}
           blockBumpKey={blockBumpRight}
+          // NUEVO: nudge lateral al miss
+          missNudgeKey={missNudgeRight}
           stats={{
             damageMin:
               oppDmgRange?.min ??
@@ -244,6 +266,9 @@ export function DuelView(props: Props) {
               0,
             fate: (selectedOpp as any)?.stats?.fate ?? 0,
           }}
+          // 👇 Estado sobre la HP bar
+          statusFlashKey={statusFlashRight}
+          statusVariant={statusVariantRight ?? null}
         />
       </div>
 

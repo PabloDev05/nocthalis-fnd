@@ -1,3 +1,4 @@
+// app/pages/gameInterface/components/ProfileCard.tsx
 import { Info } from "lucide-react";
 import { asInt } from "../lib/statUtils";
 
@@ -29,6 +30,8 @@ export default function ProfileCard({
       <h3 className="stat-text font-semibold mb-3 flex items-center text-base">
         <Info className="w-4 h-4 mr-2 text-accent" /> Profile
       </h3>
+      {/* ⭐ Divisoria debajo del título */}
+      <div className="mt-2 mb-3 h-px w-full bg-[var(--border)]/80" /> {/* ⭐ */}
       <ul className="text-xs space-y-1.5 stat-text-muted">
         <li>
           <strong>Name:</strong> {displayName ?? "—"}
