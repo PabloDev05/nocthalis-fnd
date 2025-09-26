@@ -1,3 +1,4 @@
+// app/pages/arena/components/SkillBits.tsx
 import {
   Crown,
   Percent,
@@ -8,7 +9,15 @@ import {
   Wind,
 } from "lucide-react";
 
-export function StatIcon({ k }: { k: string }) {
+type KnownStatKey =
+  | "attackPower"
+  | "blockChance"
+  | "criticalChance"
+  | "evasion"
+  | "fate"
+  | string;
+
+export function StatIcon({ k }: { k: KnownStatKey }) {
   switch (k) {
     case "attackPower":
       return <SwordIcon className="w-3.5 h-3.5" />;
@@ -36,21 +45,26 @@ export function SkillBadge({
   text?: string | null;
   kind: "passive" | "ultimate";
   pulseKey: number;
-  fate?: number;
+  fate?: number; // enteros; el backend usa Fate entero
 }) {
   const full = (text && String(text).trim().length ? text : "—") as string;
   const [name] = full.split(":");
   const Icon = kind === "passive" ? Sparkles : Crown;
 
   const luck = Math.max(0, Number(fate) || 0);
-  const alpha = Math.min(0.9, 0.18 + (luck / 100) * 0.4);
+  // halo más intenso con más Fate (sin decimales)
+  const alpha = Math.min(0.9, 18 / 100 + (luck / 100) * 0.4);
   const glowColor =
     kind === "passive"
       ? `rgba(86,156,255,${alpha})`
       : `rgba(255,214,86,${alpha})`;
 
   return (
-    <div className="mb-1 rounded-md px-2 py-1 bg-white/[.04] border border-white/[.06] relative overflow-hidden">
+    <div
+      className="mb-1 rounded-md px-2 py-1 bg-white/[.04] border border-white/[.06] relative overflow-hidden"
+      aria-label={`${title} ${name || ""}`.trim()}
+      title={full}
+    >
       <style>{`@keyframes glowPulse { 0% { opacity:0 } 35% { opacity:.6 } 100% { opacity:0 } }`}</style>
       <div
         key={pulseKey}
@@ -63,7 +77,7 @@ export function SkillBadge({
       />
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex w-4.5 h-4.5 items-center justify-center rounded bg-[rgba(120,120,255,.12)] border border-white/[.08] text-[var(--accent)]">
+          <span className="inline-flex items-center justify-center rounded bg-[rgba(120,120,255,.12)] border border-white/[.08] text-[var(--accent)] w-[18px] h-[18px]">
             <Icon className="w-3 h-3" />
           </span>
           <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-300">

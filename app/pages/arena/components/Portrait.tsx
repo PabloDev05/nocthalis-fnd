@@ -1,7 +1,9 @@
+// app/pages/arena/components/BattlePortrait.tsx
 import { User } from "lucide-react";
 import { asInt } from "../helpers";
 import { SmallMetricsCard } from "./Metrics";
 import { useState, useEffect, CSSProperties } from "react";
+import AbilitySigils from "./AbilitySigils";
 
 export function BattlePortrait({
   side,
@@ -20,10 +22,8 @@ export function BattlePortrait({
   ultShakeKey,
   hitShakeKey,
   blockBumpKey,
-  /** 👇 NUEVO: FX de status/debuff en la barra */
   statusFlashKey,
   statusVariant,
-  /** 👇 NUEVO: nudge lateral al esquivar (miss) */
   missNudgeKey,
   stats,
   widthClass,
@@ -44,15 +44,12 @@ export function BattlePortrait({
   ultShakeKey: number;
   hitShakeKey: number;
   blockBumpKey: number;
-  /** "cc" | "debuff" | "bleed" | null */
   statusVariant?: "cc" | "debuff" | "bleed" | null;
   statusFlashKey?: number;
-  /** NUEVO */
   missNudgeKey: number;
   stats: Record<string, number | undefined>;
   widthClass: string;
 }) {
-  // Duraciones de FX (ms)
   const BLOCK_FX_DURATION = 600;
   const CRIT_FX_DURATION = 700;
   const BUMP_FX_DURATION = 380;
@@ -61,7 +58,6 @@ export function BattlePortrait({
   const STATUS_FX_DURATION = 900;
   const MISS_NUDGE_DURATION = 260;
 
-  // Estados locales para que los FX SIEMPRE terminen
   const [showBlockFx, setShowBlockFx] = useState(false);
   const [showCritFx, setShowCritFx] = useState(false);
   const [showHitShake, setShowHitShake] = useState(false);
@@ -70,7 +66,6 @@ export function BattlePortrait({
   const [showStatusFx, setShowStatusFx] = useState(false);
   const [showMissNudge, setShowMissNudge] = useState(false);
 
-  // BLOQUEO
   useEffect(() => {
     if (blockFlashKey > 0) {
       setShowBlockFx(true);
@@ -82,7 +77,6 @@ export function BattlePortrait({
     }
   }, [blockFlashKey]);
 
-  // CRIT (usamos hitShakeKey como señal)
   useEffect(() => {
     if (hitShakeKey > 0) {
       setShowCritFx(true);
@@ -94,7 +88,6 @@ export function BattlePortrait({
     }
   }, [hitShakeKey]);
 
-  // HIT SHAKE
   useEffect(() => {
     if (hitShakeKey > 0) {
       setShowHitShake(true);
@@ -106,7 +99,6 @@ export function BattlePortrait({
     }
   }, [hitShakeKey]);
 
-  // ULT SHAKE
   useEffect(() => {
     if (ultShakeKey > 0) {
       setShowUltShake(true);
@@ -118,7 +110,6 @@ export function BattlePortrait({
     }
   }, [ultShakeKey]);
 
-  // BLOCK BUMP
   useEffect(() => {
     if (blockBumpKey > 0) {
       setShowBlockBump(true);
@@ -130,7 +121,6 @@ export function BattlePortrait({
     }
   }, [blockBumpKey]);
 
-  // STATUS FX (cc/debuff/bleed)
   useEffect(() => {
     if ((statusFlashKey ?? 0) > 0) {
       setShowStatusFx(true);
@@ -142,7 +132,6 @@ export function BattlePortrait({
     }
   }, [statusFlashKey]);
 
-  // MISS NUDGE (empujón lateral)
   useEffect(() => {
     if (missNudgeKey > 0) {
       setShowMissNudge(true);
@@ -154,16 +143,17 @@ export function BattlePortrait({
     }
   }, [missNudgeKey]);
 
-  const pct = Math.max(
+  // ── Normalización robusta de HP (evita incoherencias visuales)
+  const safeMax = Math.max(1, Math.round(Number.isFinite(+maxHP) ? +maxHP : 1));
+  const safeHP = Math.max(
     0,
-    Math.min(100, Math.round((hp / Math.max(1, maxHP)) * 100))
+    Math.min(safeMax, Math.round(Number.isFinite(+hp) ? +hp : 0))
   );
+  const pct = Math.max(0, Math.min(100, Math.round((safeHP / safeMax) * 100)));
 
-  // Colores base de HP
   const HP_BG =
     "linear-gradient(90deg, rgba(45,8,12,.95) 0%, rgba(85,14,20,.95) 40%, rgba(120,18,26,.95) 70%, rgba(150,22,30,.98) 100%)";
 
-  // Overlay para status
   const statusOverlay =
     statusVariant === "cc"
       ? "radial-gradient(ellipse at center, rgba(160,140,255,.28) 0%, rgba(110,90,220,.18) 40%, rgba(0,0,0,0) 70%)"
@@ -173,19 +163,20 @@ export function BattlePortrait({
           ? "radial-gradient(ellipse at center, rgba(255,60,60,.26) 0%, rgba(180,30,30,.16) 40%, rgba(0,0,0,0) 70%)"
           : "none";
 
-  // Style combinado para shake de ultimate + variable del nudge
   const wrapperStyle: CSSProperties = {
     ...(showUltShake
       ? { animation: "megaShake 750ms cubic-bezier(.36,.07,.19,.97) 1" }
       : {}),
-    // Dirección del nudge: izquierda se mueve un poco a la derecha, derecha a la izquierda
-    // @ts-ignore: CSS var
+    // @ts-ignore
     ["--dx" as any]: side === "left" ? "6px" : "-6px",
   };
 
+  const safeStats = stats ?? {};
+  const cardWidth = widthClass || "w-[320px]";
+
   return (
     <div
-      className={`relative ${widthClass} rounded-2xl border border-[var(--border)]
+      className={`relative ${cardWidth} rounded-2xl border border-[var(--border)]
                   bg-gradient-to-b from-[rgba(35,38,55,.96)] to-[rgba(15,16,22,.98)]
                   shadow-[inset_0_1px_0_rgba(255,255,255,.05),0_20px_40px_rgba(0,0,0,.55),0_0_24px_rgba(120,120,255,.12)]
                   overflow-hidden ${side === "left" ? "ml-auto" : "mr-auto"}
@@ -194,30 +185,18 @@ export function BattlePortrait({
     >
       <style>{`
         @keyframes shieldAppear { 0%{transform:scale(.86);opacity:0}40%{transform:scale(1.08);opacity:1}100%{transform:scale(1.0);opacity:0} }
-        @keyframes hpGlow { 0%{box-shadow:inset 0 0 0 0 rgba(255,80,80,0),0 0 0 rgba(0,0,0,0)}
-          30%{box-shadow:inset 0 0 24px rgba(255,90,90,.45),0 0 16px rgba(255,60,60,.35)}
-          100%{box-shadow:inset 0 0 0 0 rgba(255,80,80,0),0 0 0 rgba(0,0,0,0)} }
+        @keyframes hpGlow { 0%{box-shadow:none} 30%{box-shadow:inset 0 0 24px rgba(255,90,90,.45),0 0 16px rgba(255,60,60,.35)} 100%{box-shadow:none} }
         .hp-glow-once { animation: hpGlow 800ms ease-out 1; }
-
         @keyframes critCardFlash {
-          0%{box-shadow:inset 0 0 0 rgba(0,0,0,0);filter:saturate(1)}
+          0%{box-shadow:none;filter:saturate(1)}
           18%{box-shadow:inset 0 0 120px rgba(255,50,60,.55)}
           45%{box-shadow:inset 0 0 140px rgba(255,40,50,.65),0 0 44px rgba(255,60,80,.45);filter:saturate(1.25)}
           80%{box-shadow:inset 0 0 80px rgba(255,40,50,.35),0 0 28px rgba(255,60,80,.25);filter:saturate(1.1)}
-          100%{box-shadow:inset 0 0 0 rgba(0,0,0,0);filter:saturate(1)}
+          100%{box-shadow:none;filter:saturate(1)}
         }
-
-        @keyframes blockFlash {
-          0%{box-shadow:inset 0 0 0 rgba(0,0,0,0)}
-          20%{box-shadow:inset 0 0 100px rgba(90,170,255,.45)}
-          60%{box-shadow:inset 0 0 70px rgba(90,170,255,.25)}
-          100%{box-shadow:inset 0 0 0 rgba(0,0,0,0)}
-        }
+        @keyframes blockFlash { 0%{box-shadow:none} 20%{box-shadow:inset 0 0 100px rgba(90,170,255,.45)} 60%{box-shadow:inset 0 0 70px rgba(90,170,255,.25)} 100%{box-shadow:none} }
         @keyframes shieldRipple { 0%{transform:scale(.9);opacity:.4} 100%{transform:scale(1.5);opacity:0} }
-
-        @keyframes megaShake { 10%,90%{transform:translate3d(-1px,0,0)} 20%,80%{transform:translate3d(2px,0,0)}
-          30%,50%,70%{transform:translate3d(-4px,0,0)} 40%,60%{transform:translate3d(4px,0,0)} }
-
+        @keyframes megaShake { 10%,90%{transform:translate3d(-1px,0,0)} 20%,80%{transform:translate3d(2px,0,0)} 30%,50%,70%{transform:translate3d(-4px,0,0)} 40%,60%{transform:translate3d(4px,0,0)} }
         @keyframes hitShake {
           0%,100%{transform:translate3d(0,0,0)}
           20%{transform:translate3d(-2px,0,0) rotate(-.2deg)}
@@ -226,39 +205,20 @@ export function BattlePortrait({
           80%{transform:translate3d(2px,0,0) rotate(.2deg)}
         }
         .hit-shake-once { animation: hitShake 420ms cubic-bezier(.36,.07,.19,.97) 1; }
-
         @keyframes blockBump { 0%{transform:scale(1)} 35%{transform:scale(1.02)} 70%{transform:scale(1.008)} 100%{transform:scale(1)} }
         .block-bump-once { animation: blockBump 380ms ease-out 1; }
-
-        @keyframes ultimateFlash {
-          0%{box-shadow:inset 0 0 0 rgba(0,0,0,0)}
-          15%{box-shadow:inset 0 0 130px rgba(255,220,120,.55),0 0 36px rgba(150,80,255,.35)}
-          45%{box-shadow:inset 0 0 90px rgba(255,180,90,.35),0 0 20px rgba(150,80,255,.25)}
-          100%{box-shadow:inset 0 0 0 rgba(0,0,0,0)}
-        }
-
-        /* Status pulse sobre la barra */
-        @keyframes statusPulse {
-          0%{opacity:0; transform:scaleX(.98)}
-          25%{opacity:.9; transform:scaleX(1)}
-          60%{opacity:.4}
-          100%{opacity:0; transform:scaleX(1)}
-        }
-
-        /* NUEVO: empujón lateral para miss (usa la var --dx) */
-        @keyframes missNudge {
-          0%{ transform: translateX(0) }
-          35%{ transform: translateX(var(--dx)) }
-          100%{ transform: translateX(0) }
-        }
+        @keyframes ultimateFlash { 0%{box-shadow:none} 15%{box-shadow:inset 0 0 130px rgba(255,220,120,.55),0 0 36px rgba(150,80,255,.35)} 45%{box-shadow:inset 0 0 90px rgba(255,180,90,.35),0 0 20px rgba(150,80,255,.25)} 100%{box-shadow:none} }
+        @keyframes statusPulse { 0%{opacity:0; transform:scaleX(.98)} 25%{opacity:.9; transform:scaleX(1)} 60%{opacity:.4} 100%{opacity:0; transform:scaleX(1)} }
+        @keyframes missNudge { 0%{ transform: translateX(0) } 35%{ transform: translateX(var(--dx)) } 100%{ transform: translateX(0) } }
         .miss-nudge-once { animation: missNudge 260ms ease-out 1; }
       `}</style>
 
+      {/* Header de nivel */}
       <div className="h-9 flex items-center justify-center text-[11px] font-extrabold text-white tracking-wide bg-gradient-to-r from-[rgba(120,120,255,.16)] via-[rgba(120,120,255,.25)] to-[rgba(120,120,255,.16)] border-b border-[var(--border)] uppercase">
         Level {level}
       </div>
 
-      {/* Avatar area */}
+      {/* Avatar + FX */}
       <div
         className={`h-[160px] flex items-center justify-center relative ${showHitShake ? "hit-shake-once" : ""}`}
       >
@@ -266,13 +226,14 @@ export function BattlePortrait({
           <img
             src={avatarUrl}
             alt={`${name} portrait`}
+            aria-label={`${name} portrait`}
             className="w-28 h-28 object-cover rounded-xl opacity-95 ring-1 ring-white/[.06]"
           />
         ) : (
-          <User className="w-16 h-16 text-gray-400" />
+          <User className="w-16 h-16 text-gray-400" aria-hidden="true" />
         )}
 
-        {/* BLOQUEO – escudo + ripple */}
+        {/* FX */}
         {showBlockFx && (
           <>
             <div
@@ -317,7 +278,6 @@ export function BattlePortrait({
           </>
         )}
 
-        {/* ULT FX */}
         {ultFlashKey > 0 && (
           <div
             className="absolute inset-0 pointer-events-none"
@@ -330,7 +290,6 @@ export function BattlePortrait({
           />
         )}
 
-        {/* CRÍTICO */}
         {showCritFx && (
           <div
             className="absolute inset-0 pointer-events-none"
@@ -346,8 +305,18 @@ export function BattlePortrait({
         <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_80px_rgba(0,0,0,.55)]" />
       </div>
 
-      {/* Nombre */}
-      <div className="px-3 py-2 border-t border-[var(--border)] bg-[rgba(255,255,255,.03)] text-center">
+      {/* Barra del nombre — relative para anclar sigils */}
+      <div className="px-3 py-2 border-t border-[var(--border)] bg-[rgba(255,255,255,.03)] text-center relative">
+        <AbilitySigils
+          anchor="label-left"
+          size={28}
+          offset={10}
+          gap={8}
+          passiveText={passiveText ?? "—"}
+          ultimateText={ultimateText ?? "—"}
+          passivePulseKey={passivePulseKey}
+          ultimatePulseKey={ultimatePulseKey}
+        />
         <div
           className="text-white font-black truncate text-base tracking-wide drop-shadow-[0_1px_0_rgba(255,255,255,.2)]"
           style={{ fontFamily: "'Cinzel Decorative', serif" }}
@@ -360,9 +329,7 @@ export function BattlePortrait({
       {/* HP BAR */}
       <div className="mt-[2px]">
         <div
-          className={`h-7 border-y border-[var(--border)] bg-[rgba(255,255,255,.03)] overflow-hidden relative ${
-            hpGlowKey ? "hp-glow-once" : ""
-          }`}
+          className={`h-7 border-y border-[var(--border)] bg-[rgba(255,255,255,.03)] overflow-hidden relative ${hpGlowKey ? "hp-glow-once" : ""}`}
           key={hpGlowKey}
         >
           <div
@@ -375,7 +342,6 @@ export function BattlePortrait({
               filter: "brightness(.88)",
             }}
           />
-          {/* Overlay de STATUS sobre la barra */}
           {showStatusFx && statusOverlay !== "none" && (
             <div
               className="absolute inset-0 pointer-events-none"
@@ -387,13 +353,13 @@ export function BattlePortrait({
             />
           )}
           <div className="absolute inset-0 flex items-center justify-center text-[11px] text-white/95 font-semibold tracking-wide">
-            {asInt(hp)} / {asInt(maxHP)} HP
+            {asInt(safeHP)} / {asInt(safeMax)} HP
           </div>
         </div>
       </div>
 
       <div className="pb-3 px-3 pt-2">
-        <SmallMetricsCard map={stats} />
+        <SmallMetricsCard map={safeStats} />
       </div>
 
       <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_0_1px_rgba(255,255,255,.07),0_0_28px_rgba(120,120,255,.12)]" />
