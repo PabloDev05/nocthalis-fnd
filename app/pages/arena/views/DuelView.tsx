@@ -18,7 +18,7 @@ type Props = {
   hpOpp: number;
 
   centerLabel: "VS" | "WIN" | "LOSE" | "DRAW";
-  shakeKey: number;
+  shakeKey: number; // existe para otros FX; NO afecta al VS
   onBack: () => void;
 
   // skill texts
@@ -77,7 +77,6 @@ export function DuelView(props: Props) {
     hpMe,
     hpOpp,
     centerLabel,
-    shakeKey,
     onBack,
     myPassiveText,
     myUltText,
@@ -122,11 +121,12 @@ export function DuelView(props: Props) {
     selectedOpp?.className ?? ""
   );
 
-  // ─── VS: animar SOLO al inicio del duelo ─────────────────────────────
+  // ─── VS: animar SOLO al inicio ─────────────────────────────
   const [duelStartKey, setDuelStartKey] = useState(0);
+  const [showSplit, setShowSplit] = useState(false); // muestra el corte
+  const [splitAnimating, setSplitAnimating] = useState(false); // aplica keyframes del corte
   const prevLabelRef = useRef(centerLabel);
 
-  // 1) Si cambia a VS (de otro valor), animar
   useEffect(() => {
     if (centerLabel === "VS" && prevLabelRef.current !== "VS") {
       setDuelStartKey((k) => k + 1);
@@ -134,28 +134,49 @@ export function DuelView(props: Props) {
     prevLabelRef.current = centerLabel;
   }, [centerLabel]);
 
-  // 2) En el montaje inicial, si ya está en VS, también animar
   useEffect(() => {
     if (centerLabel === "VS") {
-      const id = window.setTimeout(() => setDuelStartKey((k) => k + 1), 50);
+      const id = window.setTimeout(() => setDuelStartKey((k) => k + 1), 40);
       return () => window.clearTimeout(id);
     }
-  }, []); // ← se ejecuta una vez al montar
+  }, []);
+
+  // Core: al disparar, mostramos split centrado, animamos y luego recomponemos a texto único
+  useEffect(() => {
+    if (!duelStartKey || centerLabel !== "VS") return;
+
+    // 1) Mostrar split centrado
+    setShowSplit(true);
+    // 2) Iniciar animación del corte
+    const start = window.setTimeout(() => setSplitAnimating(true), 10);
+    // 3) Finalizar animación y recomponer en un solo VS centrado
+    const CUT_MS = 380; // duración del snap de cierre visual
+    const end = window.setTimeout(() => {
+      setSplitAnimating(false);
+      setShowSplit(false); // vuelve el VS entero
+    }, CUT_MS + 40);
+
+    return () => {
+      window.clearTimeout(start);
+      window.clearTimeout(end);
+    };
+  }, [duelStartKey, centerLabel]);
 
   return (
     <div className="flex flex-col items-center gap-5">
       <style>{`
-        /* ───────── Paleta gótica y potencia ───────── */
+        /* ───────── Dark-gothic minimal (SIN fondos) ───────── */
         :root{
-          --gothic-grad: conic-gradient(from 220deg, #e34a5f 0%, #a038ff 42%, #4b163f 85%);
-          --gothic-glow-1: rgba(227, 74, 95, .95);
-          --gothic-glow-2: rgba(160, 56, 255, .75);
-          --gothic-stroke: rgba(10, 4, 16, .95);
+          --vs-red: #B01622;                 /* rojo profundo sobrio */
+          --stroke: rgba(6, 4, 10, .9);
+          --glow1: rgba(150, 18, 38, .22);
+          --glow2: rgba(120, 14, 36, .12);
 
-          --slash-halo: rgba(255, 248, 235, 1);
-          --slash-trail: rgba(255, 248, 235, .6);
+          --win-green: #1f6f4a;              /* WIN sobrio */
+          --win-glow: rgba(20, 120, 80, .20);
 
-          --blood: #991128;
+          --slash-halo: rgba(255, 238, 232, 1);
+          --slash-trail: rgba(255, 220, 208, .45);
         }
 
         .arena-center-zone{
@@ -166,120 +187,98 @@ export function DuelView(props: Props) {
 
         .arena-center-label{
           position: relative; width:100%;
-          display:flex; align-items:center; justify-content:center;
+          display:flex; align-items:center; justify-content:center; /* ✅ siempre centrado */
           pointer-events: none;
-          min-height: 110px; /* evita recorte de efectos */
+          min-height: 120px;
+          background: transparent; /* ✅ sin “cuadrado” */
+          overflow: visible;
         }
 
-        .arena-center-label .label-text{
-          position: relative; z-index: 2;
+        .label-text{
           font-family: 'Cinzel Decorative', serif;
-          font-weight: 900;
-          font-size: 72px;
+          font-weight: 800;
+          font-size: 70px;
           line-height: 1;
-          letter-spacing: .01em;
-          background: var(--gothic-grad);
-          -webkit-background-clip: text;
-          background-clip: text;
-          color: transparent;
-          -webkit-text-stroke: 1px var(--gothic-stroke);
+          letter-spacing: .005em;
+          -webkit-text-stroke: 0.8px var(--stroke);
           text-shadow:
-            0 0 0 var(--gothic-stroke),
-            0 0 26px var(--gothic-glow-1),
-            0 0 52px var(--gothic-glow-2),
-            0 3px 0 rgba(255,255,255,.06);
-          filter:
-            drop-shadow(0 0 18px rgba(227, 74, 95, .35))
-            drop-shadow(0 0 30px rgba(160, 56, 255, .28));
+            0 -1px 0 var(--stroke),
+            0 1px 2px var(--glow1),
+            0 0 14px var(--glow2);
         }
+        .vs .label-text   { color: var(--vs-red); }
+        .win .label-text  { color: var(--win-green); text-shadow: 0 -1px 0 var(--stroke), 0 1px 2px var(--win-glow), 0 0 14px var(--win-glow); }
+        .lose .label-text { color: #8b1f2a; }
+        .draw .label-text { color: #888; }
 
-        /* Pulso suave SOLO al montar en VS */
-        .arena-center-label.vs .label-text{
-          animation: centerPulse 900ms ease-out 1;
+        /* Entrada sutil solo al montar VS */
+        .vs .label-text{
+          animation: vsIn 320ms ease-out 1;
           transform-origin: center;
         }
-        @keyframes centerPulse{
-          0%   { opacity: 0; transform: scale(.86); filter: blur(1px); }
-          40%  { opacity: .98; transform: scale(1.08); filter: blur(0); }
+        @keyframes vsIn{
+          0%   { opacity: 0; transform: scale(.98); }
           100% { opacity: 1; transform: scale(1.00); }
         }
 
-        /* ───────── Katana slash (visible + por encima del texto) ───────── */
+        /* ───────── Split diagonal (centrado, sin overlays) ───────── */
+        .diag-split{
+          position: relative;
+          display: grid;
+          place-items: center;   /* ✅ centrado exacto mientras dura el split */
+        }
+        .piece{ grid-area: 1/1; }
+
+        /* Cortes diagonales (≈ -20°) con clip-path; sin fondos */
+        .diag-top{
+          clip-path: polygon(0% 0%, 100% 0%, 100% 35%, 0% 60%);
+          transform: translate(-10px,-12px) rotate(-2.6deg); /* posición inicial */
+        }
+        .diag-bot{
+          clip-path: polygon(0% 60%, 100% 35%, 100% 100%, 0% 100%);
+          transform: translate(10px,12px) rotate(2.6deg);    /* posición inicial */
+        }
+
+        /* Animación que cierra hacia el centro (sin costuras, sigue sin fondo) */
+        .diag-anim .diag-top{ animation: topClose 380ms cubic-bezier(.2,.8,.2,1) 1 forwards; }
+        .diag-anim .diag-bot{ animation: botClose 380ms cubic-bezier(.2,.8,.2,1) 1 forwards; }
+        @keyframes topClose{
+          0%  { transform: translate(-10px,-12px) rotate(-2.6deg); }
+          100%{ transform: translate(-2px,-3px) rotate(-0.8deg); }
+        }
+        @keyframes botClose{
+          0%  { transform: translate(10px,12px) rotate(2.6deg); }
+          100%{ transform: translate(2px,3px) rotate(0.8deg); }
+        }
+
+        /* ───────── Slash minimal (línea + estela) ───────── */
         .katana{
           position:absolute; inset:0; pointer-events:none;
           transform-origin:center;
-          transform: rotate(-20deg) translate3d(-150%,0,0);
-          opacity:0;
-          z-index: 5; /* encima del texto */
-          will-change: transform, opacity;
-          mix-blend-mode: screen; /* mejora contraste sobre fondos oscuros */
+          transform: rotate(-22deg) translate3d(-160%,0,0);
+          opacity:0; z-index: 2; mix-blend-mode: screen;
         }
-        .katana.play{
-          animation: katanaRun 700ms cubic-bezier(.25,.8,.25,1) 1 forwards;
-          opacity:1;
-        }
-        /* línea central gruesa + halo */
+        .katana.play{ animation: katanaRun 480ms cubic-bezier(.25,.8,.25,1) 1 forwards; opacity:1; }
         .katana .line{
           position:absolute; left:50%; top:-15%;
-          width:5px; height:130%;
+          width:3.5px; height:130%; transform: translateX(-50%);
           background: linear-gradient(180deg, rgba(255,255,255,0) 0%, var(--slash-halo) 45%, rgba(255,255,255,0) 100%);
-          box-shadow:
-            0 0 10px var(--slash-halo),
-            0 0 28px var(--slash-halo),
-            0 0 48px rgba(255,255,255,.75);
-          transform: translateX(-50%);
-          border-radius: 3px;
+          box-shadow: 0 0 8px var(--slash-halo), 0 0 16px var(--slash-halo);
+          border-radius: 2px;
         }
-        /* rastro de la hoja */
         .katana .trail{
-          position:absolute; left:50%; top:10%;
-          width:360px; height:12px; border-radius:12px;
+          position:absolute; left:50%; top:8%;
+          width:300px; height:7px; border-radius:7px;
           transform: translateX(-50%) skewX(-22deg) rotate(90deg);
-          background: radial-gradient(closest-side, var(--slash-trail) 0%, rgba(255,255,255,0) 75%);
-          filter: blur(1.2px);
+          background: radial-gradient(closest-side, var(--slash-trail) 0%, rgba(255,255,255,0) 70%);
+          filter: blur(.7px);
         }
-        /* chispas visibles */
-        .katana .spark{
-          position:absolute; width:10px; height:3px; border-radius:2px;
-          background: linear-gradient(90deg, #fff, rgba(255,255,255,.2));
-          filter: drop-shadow(0 0 8px var(--slash-halo));
-          opacity:.95;
-        }
-        .katana .s1{ left:44%; top:36%; animation: spark1 560ms ease-out 1; }
-        .katana .s2{ left:53%; top:47%; animation: spark2 560ms ease-out 1; }
-        .katana .s3{ left:49%; top:58%; animation: spark3 560ms ease-out 1; }
-
-        @keyframes spark1{ 0%{transform:translate(0,0) rotate(15deg)} 100%{transform:translate(-56px,-26px) rotate(35deg); opacity:0} }
-        @keyframes spark2{ 0%{transform:translate(0,0) rotate(-10deg)} 100%{transform:translate(52px,20px) rotate(-35deg); opacity:0} }
-        @keyframes spark3{ 0%{transform:translate(0,0) rotate(0)} 100%{transform:translate(-30px,36px) rotate(18deg); opacity:0} }
-
         @keyframes katanaRun{
-          0%   { transform: rotate(-20deg) translate3d(-160%,0,0); opacity:0; }
-          12%  { opacity:1; }
-          70%  { opacity:1; }
-          100% { transform: rotate(-20deg) translate3d(160%,0,0); opacity:0; }
+          0%{ transform: rotate(-22deg) translate3d(-170%,0,0); opacity:0; }
+          20%{ opacity:1 }
+          80%{ opacity:1 }
+          100%{ transform: rotate(-22deg) translate3d(170%,0,0); opacity:0; }
         }
-
-        /* Flash breve de pantalla para contraste */
-        .flash{ position:absolute; inset:0; z-index:4; background: radial-gradient(circle at 50% 45%, rgba(255,255,255,.8), rgba(255,255,255,0) 60%); opacity:0; pointer-events:none; mix-blend-mode: screen; }
-        .flash.play{ animation: flashPop 180ms ease-out 1; }
-        @keyframes flashPop{ 0%{opacity:.85} 100%{opacity:0} }
-
-        /* Sangre sutil (un par de gotas) */
-        .blood{ position:absolute; inset:0; pointer-events:none; opacity:0; z-index:3; }
-        .blood.play{ opacity:1; animation:bloodFade 900ms ease-out 1 forwards; }
-        .blood:before, .blood:after{
-          content:""; position:absolute; left:52%; top:46%;
-          width:6px; height:12px; border-radius:5px 5px 50% 50%;
-          background: radial-gradient(circle at 50% 25%, var(--blood) 0%, #4d0713 70%);
-          transform: rotate(-10deg);
-          box-shadow: -10px 6px 0 rgba(77,7,19,.6);
-        }
-        .blood:after{
-          left:48%; top:58%; transform: rotate(6deg);
-          width:4px; height:8px; box-shadow: 8px 6px 0 rgba(77,7,19,.5);
-        }
-        @keyframes bloodFade { 0%{opacity:.9} 100%{opacity:0} }
       `}</style>
 
       {/* Portraits */}
@@ -329,7 +328,6 @@ export function DuelView(props: Props) {
               0,
             fate: (me as any)?.stats?.fate ?? 0,
           }}
-          // Estado sobre la HP bar
           statusFlashKey={statusFlashLeft}
           statusVariant={statusVariantLeft ?? null}
         />
@@ -340,23 +338,29 @@ export function DuelView(props: Props) {
             className={`arena-center-label ${centerLabel.toLowerCase()}`}
             key={centerLabel === "VS" ? duelStartKey : `${centerLabel}-static`}
           >
-            <span className="label-text" key={shakeKey}>
-              {centerLabel}
-            </span>
+            {centerLabel === "VS" ? (
+              showSplit ? (
+                // Split centrado mientras dura la animación
+                <span
+                  className={`diag-split ${splitAnimating ? "diag-anim" : ""}`}
+                >
+                  <span className="label-text piece diag-top">VS</span>
+                  <span className="label-text piece diag-bot">VS</span>
+                </span>
+              ) : (
+                // Luego de animar: VS entero, centrado y quieto
+                <span className="label-text">VS</span>
+              )
+            ) : (
+              <span className="label-text">{centerLabel}</span>
+            )}
 
-            {/* Slash + flash + gotas SOLO al inicio de VS */}
+            {/* Slash minimal SOLO al inicio de VS */}
             {centerLabel === "VS" && (
-              <>
-                <div className={`katana ${duelStartKey ? "play" : ""}`}>
-                  <div className="line" />
-                  <div className="trail" />
-                  <div className="spark s1" />
-                  <div className="spark s2" />
-                  <div className="spark s3" />
-                </div>
-                <div className={`flash ${duelStartKey ? "play" : ""}`} />
-                <div className={`blood ${duelStartKey ? "play" : ""}`} />
-              </>
+              <div className={`katana ${duelStartKey ? "play" : ""}`}>
+                <div className="line" />
+                <div className="trail" />
+              </div>
             )}
           </div>
 
@@ -432,7 +436,6 @@ export function DuelView(props: Props) {
               0,
             fate: (selectedOpp as any)?.stats?.fate ?? 0,
           }}
-          // Estado sobre la HP bar
           statusFlashKey={statusFlashRight}
           statusVariant={statusVariantRight ?? null}
         />
