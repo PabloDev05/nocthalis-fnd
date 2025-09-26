@@ -1,3 +1,4 @@
+// app/pages/arena/components/LogsAndRewards.tsx
 import {
   Coins,
   Crown,
@@ -90,6 +91,23 @@ function isImpact(e: LogEntry): e is LogEntry & { kind: ImpactKind } {
   return e.kind !== "status" && e.kind !== "passive" && e.kind !== "ultimate";
 }
 
+/** Resalta el nombre de la habilidad si el texto viene como “triggers X” o “unleashes X” */
+function renderAbilityText(s: string) {
+  const m = s.match(/\b(triggers|unleashes)\s+([A-Za-z0-9 _'’\-:]+)\b/);
+  if (!m) return <EmphasizeNumbers text={s} />;
+  const before = s.slice(0, m.index);
+  const verb = m[1];
+  const name = m[2].trim();
+  const after = s.slice((m.index ?? 0) + m[0].length);
+  return (
+    <>
+      <EmphasizeNumbers text={before} /> {verb}{" "}
+      <i className="text-white/95 font-bold">{name}</i>
+      <EmphasizeNumbers text={after} />
+    </>
+  );
+}
+
 export function CombatLog({
   entries,
   myName: myNameProp,
@@ -111,7 +129,6 @@ export function CombatLog({
     if (!entries?.length) return;
     const last = entries[entries.length - 1];
 
-    // Map directo LogKind → SfxKind
     const k = last.kind;
     if (
       k === "hit" ||
@@ -122,7 +139,6 @@ export function CombatLog({
       k === "ultimate" ||
       k === "passive"
     ) {
-      // tuning suave por tipo
       const opts =
         k === "crit"
           ? { volume: 1.0, rate: 0.98 }
@@ -138,9 +154,11 @@ export function CombatLog({
     }
   }, [entries.length]);
 
-  // autoscroll
+  // autoscroll (suave)
   useEffect(() => {
-    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+    if (!ref.current) return;
+    const el = ref.current;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [entries.length]);
 
   const { myName, oppName } = useMemo(() => {
@@ -262,6 +280,14 @@ export function CombatLog({
               displayText = `${blocker} blocks ${n}!`;
             }
 
+            const content =
+              e.kind === "ultimate" || e.kind === "passive" ? (
+                // resalto nombre de habilidad si hay patrón
+                renderAbilityText(displayText)
+              ) : (
+                <EmphasizeNumbers text={displayText} />
+              );
+
             return (
               <li
                 key={`${e.turn}-${i}`}
@@ -276,7 +302,7 @@ export function CombatLog({
                 </span>
                 <span className="text-zinc-500 tabular-nums">T{e.turn}</span>
                 <span className={txtCls} title={e.text}>
-                  <EmphasizeNumbers text={displayText} />
+                  {content}
                 </span>
               </li>
             );
@@ -298,7 +324,7 @@ export function RewardsPanel({ rewards }: { rewards: Reward }) {
   // 🔊 SFX al mostrar el panel de recompensas — totalmente separado del start fight
   useEffect(() => {
     if (!rewards) return;
-    soundManager.play("uiReward", { volume: 1 }); // ← usa su propia clave
+    soundManager.play("uiReward", { volume: 1 });
   }, [rewards]);
 
   if (!rewards) return null;
