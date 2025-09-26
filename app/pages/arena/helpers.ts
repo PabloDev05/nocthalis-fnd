@@ -54,6 +54,48 @@ function readTags(tags: any) {
   return tagHas;
 }
 
+/** Extrae un número desde tags tipo "...:chance:23" o "...:roll:57" (ignora prefijos attacker/defender) */
+function getNumFromTags(tags: any, token: "chance" | "roll"): number | undefined {
+  if (!tags) return;
+  const rx = new RegExp(`${token}:(\\d+)`, "i");
+
+  if (Array.isArray(tags)) {
+    for (const t of tags) {
+      const m = rx.exec(String(t));
+      if (m && m[1] != null) {
+        const n = Number(m[1]);
+        if (Number.isFinite(n)) return Math.trunc(n);
+      }
+    }
+    return;
+  }
+  if (typeof tags === "object") {
+    // si viniera como { chance: 23, roll: 57 }
+    const v = (tags as any)[token];
+    if (Number.isFinite(Number(v))) return Math.trunc(Number(v));
+    // o embebido en strings de propiedades
+    for (const [, vv] of Object.entries(tags as Record<string, any>)) {
+      const m = rx.exec(String(vv));
+      if (m && m[1] != null) {
+        const n = Number(m[1]);
+        if (Number.isFinite(n)) return Math.trunc(n);
+      }
+    }
+  }
+  return;
+}
+
+function hasPityTag(tags: any): boolean {
+  if (!tags) return false;
+  if (Array.isArray(tags)) return tags.some((t) => String(t).toLowerCase().includes(":pity"));
+  if (typeof tags === "object") {
+    for (const vv of Object.values(tags as Record<string, any>)) {
+      if (String(vv).toLowerCase().includes(":pity")) return true;
+    }
+  }
+  return false;
+}
+
 function readFlags(raw: any) {
   // 👇 casteo a any para que TS no se queje aunque TimelineBE no tenga 'type'
   const ev = String(raw?.event ?? (raw as any)?.type ?? raw?.outcome ?? "").toLowerCase();
@@ -110,6 +152,7 @@ export function isBlockEntry(e: Partial<LogEntry> & Record<string, any>): boolea
 /* ──────────────────────────────────────────────────────────────────
    NUEVO: enrichTimelinePayload
    - No hace cálculos. Solo reacomoda/alias campos para la UI/scheduler.
+   - Ahora extrae chance/roll/pity de tags en PASSIVE/ULTIMATE.
    ────────────────────────────────────────────────────────────────── */
 export function enrichTimelinePayload<T extends TimelineBE>(raw: T): T {
   const e: any = { ...raw };
@@ -129,7 +172,7 @@ export function enrichTimelinePayload<T extends TimelineBE>(raw: T): T {
   const dotKey = e.dotKey || (tagKey === "bleed" || tagKey === "poison" || tagKey === "burn" ? tagKey : null) || (e.bleed ? "bleed" : e.poison ? "poison" : e.burn ? "burn" : null);
   if (dotKey) e.dotKey = dotKey;
 
-  // ultimate preview desde tags
+  // ultimate preview desde tags (si alguna vez lo usaste así)
   if (typeof e.tags === "object" && (e.tags as any).ultimate) {
     const u = (e.tags as any).ultimate || {};
     e.ultimate = {
@@ -158,6 +201,25 @@ export function enrichTimelinePayload<T extends TimelineBE>(raw: T): T {
       dotPerTurn: s.dotPerTurn != null ? asInt(s.dotPerTurn) : undefined,
       stacks: s.stacks != null ? asInt(s.stacks) : undefined,
     };
+  }
+
+  // ── NUEVO: chance/roll/pity para passive/ultimate desde tags "…:chance:X", "…:roll:Y", "…:pity"
+  const ev = String(e.event ?? "").toLowerCase();
+  if (ev === "ultimate_cast" || ev === "passive_proc") {
+    const chance = getNumFromTags(e.tags, "chance");
+    const roll = getNumFromTags(e.tags, "roll");
+    const pity = hasPityTag(e.tags);
+
+    e.chancePercent = Number.isFinite(Number(e.chancePercent)) ? asInt(e.chancePercent) : (chance ?? undefined);
+    e.roll = Number.isFinite(Number(e.roll)) ? asInt(e.roll) : (roll ?? undefined);
+    e.pity = Boolean(e.pity) || pity;
+
+    // asegurar estructura de ability
+    e.ability = e.ability || {};
+    if (ev === "ultimate_cast") e.ability.kind = "ultimate";
+    if (ev === "passive_proc") e.ability.kind = "passive";
+    if (e.ability.durationTurns != null) e.ability.durationTurns = asInt(e.ability.durationTurns);
+    if (e.ability.name != null) e.ability.name = String(e.ability.name);
   }
 
   return e as T;
