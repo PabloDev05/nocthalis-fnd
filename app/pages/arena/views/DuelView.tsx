@@ -1,4 +1,3 @@
-// app/pages/arena/views/DuelView.tsx
 import { useEffect, useRef, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { BattlePortrait } from "../components/Portrait";
@@ -18,7 +17,7 @@ type Props = {
   hpOpp: number;
 
   centerLabel: "VS" | "WIN" | "LOSE" | "DRAW";
-  shakeKey: number; // existe para otros FX; NO afecta al VS
+  shakeKey: number;
   onBack: () => void;
 
   // skill texts
@@ -27,7 +26,7 @@ type Props = {
   oppPassiveText: string | null;
   oppUltText: string | null;
 
-  // dmg ranges
+  // dmg ranges (compat fallback)
   myDmgRange: { min: number; max: number } | null;
   oppDmgRange: { min: number; max: number } | null;
 
@@ -121,39 +120,39 @@ export function DuelView(props: Props) {
     selectedOpp?.className ?? ""
   );
 
-  // ─── VS: animar SOLO al inicio ─────────────────────────────
+  // ─── VS: animar SOLO al entrar a "VS" ───────────────────────
   const [duelStartKey, setDuelStartKey] = useState(0);
-  const [showSplit, setShowSplit] = useState(false); // muestra el corte
-  const [splitAnimating, setSplitAnimating] = useState(false); // aplica keyframes del corte
+  const [showSplit, setShowSplit] = useState(false);
+  const [splitAnimating, setSplitAnimating] = useState(false);
   const prevLabelRef = useRef(centerLabel);
 
+  // Dispara una sola vez cuando entramos a "VS" (incluye primer montaje)
   useEffect(() => {
     if (centerLabel === "VS" && prevLabelRef.current !== "VS") {
       setDuelStartKey((k) => k + 1);
     }
+    // si montó ya en "VS" y nunca disparamos:
+    if (
+      centerLabel === "VS" &&
+      prevLabelRef.current === "VS" &&
+      duelStartKey === 0
+    ) {
+      setDuelStartKey(1);
+    }
     prevLabelRef.current = centerLabel;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerLabel]);
 
-  useEffect(() => {
-    if (centerLabel === "VS") {
-      const id = window.setTimeout(() => setDuelStartKey((k) => k + 1), 40);
-      return () => window.clearTimeout(id);
-    }
-  }, []);
-
-  // Core: al disparar, mostramos split centrado, animamos y luego recomponemos a texto único
+  // Core: mostrar split, animar, y recomponer a un solo VS
   useEffect(() => {
     if (!duelStartKey || centerLabel !== "VS") return;
 
-    // 1) Mostrar split centrado
     setShowSplit(true);
-    // 2) Iniciar animación del corte
     const start = window.setTimeout(() => setSplitAnimating(true), 10);
-    // 3) Finalizar animación y recomponer en un solo VS centrado
-    const CUT_MS = 380; // duración del snap de cierre visual
+    const CUT_MS = 380;
     const end = window.setTimeout(() => {
       setSplitAnimating(false);
-      setShowSplit(false); // vuelve el VS entero
+      setShowSplit(false);
     }, CUT_MS + 40);
 
     return () => {
@@ -162,17 +161,37 @@ export function DuelView(props: Props) {
     };
   }, [duelStartKey, centerLabel]);
 
+  // ✅ Unificación: siempre usar uiDamageMin/uiDamageMax si están presentes
+  const myUiMin = (me as any)?.uiDamageMin;
+  const myUiMax = (me as any)?.uiDamageMax;
+  const oppUiMin = (selectedOpp as any)?.uiDamageMin;
+  const oppUiMax = (selectedOpp as any)?.uiDamageMax;
+
+  const myDamageMin = Number.isFinite(Number(myUiMin))
+    ? Number(myUiMin)
+    : (myDmgRange?.min ?? 0);
+  const myDamageMax = Number.isFinite(Number(myUiMax))
+    ? Number(myUiMax)
+    : (myDmgRange?.max ?? 0);
+
+  const oppDamageMin = Number.isFinite(Number(oppUiMin))
+    ? Number(oppUiMin)
+    : (oppDmgRange?.min ?? 0);
+  const oppDamageMax = Number.isFinite(Number(oppUiMax))
+    ? Number(oppUiMax)
+    : (oppDmgRange?.max ?? 0);
+
   return (
     <div className="flex flex-col items-center gap-5">
       <style>{`
-        /* ───────── Dark-gothic minimal (SIN fondos) ───────── */
+        /* ───────── Dark-gothic minimal ───────── */
         :root{
-          --vs-red: #B01622;                 /* rojo profundo sobrio */
+          --vs-red: #B01622;
           --stroke: rgba(6, 4, 10, .9);
           --glow1: rgba(150, 18, 38, .22);
           --glow2: rgba(120, 14, 36, .12);
 
-          --win-green: #1f6f4a;              /* WIN sobrio */
+          --win-green: #1f6f4a;
           --win-glow: rgba(20, 120, 80, .20);
 
           --slash-halo: rgba(255, 238, 232, 1);
@@ -187,10 +206,10 @@ export function DuelView(props: Props) {
 
         .arena-center-label{
           position: relative; width:100%;
-          display:flex; align-items:center; justify-content:center; /* ✅ siempre centrado */
+          display:flex; align-items:center; justify-content:center;
           pointer-events: none;
           min-height: 120px;
-          background: transparent; /* ✅ sin “cuadrado” */
+          background: transparent;
           overflow: visible;
         }
 
@@ -211,7 +230,7 @@ export function DuelView(props: Props) {
         .lose .label-text { color: #8b1f2a; }
         .draw .label-text { color: #888; }
 
-        /* Entrada sutil solo al montar VS */
+        /* Entrada sutil al montar VS */
         .vs .label-text{
           animation: vsIn 320ms ease-out 1;
           transform-origin: center;
@@ -221,25 +240,25 @@ export function DuelView(props: Props) {
           100% { opacity: 1; transform: scale(1.00); }
         }
 
-        /* ───────── Split diagonal (centrado, sin overlays) ───────── */
+        /* ───────── Split diagonal (centrado) ───────── */
         .diag-split{
           position: relative;
           display: grid;
-          place-items: center;   /* ✅ centrado exacto mientras dura el split */
+          place-items: center;
         }
         .piece{ grid-area: 1/1; }
 
-        /* Cortes diagonales (≈ -20°) con clip-path; sin fondos */
+        /* Cortes diagonales (≈ -20°) con clip-path */
         .diag-top{
           clip-path: polygon(0% 0%, 100% 0%, 100% 35%, 0% 60%);
-          transform: translate(-10px,-12px) rotate(-2.6deg); /* posición inicial */
+          transform: translate(-10px,-12px) rotate(-2.6deg);
         }
         .diag-bot{
           clip-path: polygon(0% 60%, 100% 35%, 100% 100%, 0% 100%);
-          transform: translate(10px,12px) rotate(2.6deg);    /* posición inicial */
+          transform: translate(10px,12px) rotate(2.6deg);
         }
 
-        /* Animación que cierra hacia el centro (sin costuras, sigue sin fondo) */
+        /* Animación de cierre (sin fondos extra) */
         .diag-anim .diag-top{ animation: topClose 380ms cubic-bezier(.2,.8,.2,1) 1 forwards; }
         .diag-anim .diag-bot{ animation: botClose 380ms cubic-bezier(.2,.8,.2,1) 1 forwards; }
         @keyframes topClose{
@@ -305,8 +324,8 @@ export function DuelView(props: Props) {
           // Miss nudge
           missNudgeKey={missNudgeLeft}
           stats={{
-            damageMin: myDmgRange?.min ?? (me as any)?.uiDamageMin ?? 0,
-            damageMax: myDmgRange?.max ?? (me as any)?.uiDamageMax ?? 0,
+            damageMin: myDamageMin,
+            damageMax: myDamageMax,
             attackPower:
               myPrimaryKey === "magicPower"
                 ? (me?.combatStats as any)?.magicPower
@@ -336,11 +355,14 @@ export function DuelView(props: Props) {
         <div className="arena-center-zone">
           <div
             className={`arena-center-label ${centerLabel.toLowerCase()}`}
-            key={centerLabel === "VS" ? duelStartKey : `${centerLabel}-static`}
+            key={
+              centerLabel === "VS"
+                ? `vs-${duelStartKey}`
+                : `${centerLabel}-static`
+            }
           >
             {centerLabel === "VS" ? (
               showSplit ? (
-                // Split centrado mientras dura la animación
                 <span
                   className={`diag-split ${splitAnimating ? "diag-anim" : ""}`}
                 >
@@ -348,7 +370,6 @@ export function DuelView(props: Props) {
                   <span className="label-text piece diag-bot">VS</span>
                 </span>
               ) : (
-                // Luego de animar: VS entero, centrado y quieto
                 <span className="label-text">VS</span>
               )
             ) : (
@@ -405,16 +426,8 @@ export function DuelView(props: Props) {
           // Miss nudge
           missNudgeKey={missNudgeRight}
           stats={{
-            damageMin:
-              oppDmgRange?.min ??
-              (selectedOpp?.combatStats as any)?.minDamage ??
-              (selectedOpp?.combatStats as any)?.damageMin ??
-              0,
-            damageMax:
-              oppDmgRange?.max ??
-              (selectedOpp?.combatStats as any)?.maxDamage ??
-              (selectedOpp?.combatStats as any)?.damageMax ??
-              0,
+            damageMin: oppDamageMin,
+            damageMax: oppDamageMax,
             attackPower:
               oppPrimaryKey === "magicPower"
                 ? (selectedOpp as any)?.combatStats?.magicPower
