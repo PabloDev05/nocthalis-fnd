@@ -8,6 +8,7 @@ import ResistancesCard from "./components/ResistancesCard";
 import EquipmentAndInventory from "./components/EquipmentAndInventory";
 import AttributesPanel from "./components/AttributesPanel";
 import StaminaBar from "./components/StaminaBar";
+import FeedbackForm from "./components/FeedbackForm"; // ⬅️ NUEVO
 import { useCharacter } from "./hooks/useCharacter";
 import { asInt } from "./lib/statUtils";
 import {
@@ -69,6 +70,7 @@ export default function GameInterface() {
 
           {/* left */}
           <main className="lg:col-span-5 xl:col-span-6 space-y-4">
+            {/* Panel superior (profile + skills + metrics) */}
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel-2)] p-3 md:p-4 space-y-4 shadow-lg overflow-visible">
               {loading && (
                 <div className="card-muted p-3 text-xs stat-text-muted">
@@ -97,6 +99,11 @@ export default function GameInterface() {
                 <CombatMetrics data={data ?? (null as any)} />
               </div>
             </div>
+
+            {/* ⬇️ Panel de Feedback: ocupa justo el bloque verde de tu captura */}
+            <FeedbackForm
+              defaultUsername={displayName} // opcional; el email se prellena desde el JWT
+            />
           </main>
 
           {/* right */}
