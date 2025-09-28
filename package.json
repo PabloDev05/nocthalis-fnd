@@ -13,6 +13,7 @@
     "@react-router/serve": "^7.8.0",
     "axios": "^1.10.0",
     "formik": "^2.4.6",
+    "framer-motion": "^12.23.22",
     "howler": "^2.2.4",
     "isbot": "^5.1.27",
     "lucide-react": "^0.525.0",
