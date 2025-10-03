@@ -15,9 +15,6 @@ export default [
   route("/arena", "./pages/protected/ProtectedArena.tsx"),
   route("/game", "./pages/protected/ProtectedGameInterface.tsx"),
 
-  // utilidades / pruebas
-  route("/class-diagram", "./pages/ClassDiagram.tsx"),
-
   // 404
   route("*", "./pages/NotFound.tsx"),
 ] satisfies RouteConfig;

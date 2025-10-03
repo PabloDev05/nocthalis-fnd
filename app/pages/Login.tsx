@@ -16,10 +16,8 @@ const Login = () => {
   const navigate = useNavigate();
 
   const validationSchema = Yup.object({
-    email: Yup.string()
-      .email("Email inválido")
-      .required("El email es obligatorio"),
-    password: Yup.string().required("La contraseña es obligatoria"),
+    email: Yup.string().email("Invalid email").required("Email is required"),
+    password: Yup.string().required("Password is required"),
   });
 
   const initialValues = { email: "", password: "" };
@@ -47,6 +45,7 @@ const Login = () => {
             res.data.characterClass ?? null
           );
 
+          // Clear any stale class selection
           localStorage.removeItem("selectedClassId");
           localStorage.removeItem("selectedClassName");
           localStorage.removeItem("selectedClassImage");
@@ -55,15 +54,13 @@ const Login = () => {
 
           navigate(res.data.classChosen ? "/game" : "/select-class");
         } else {
-          setServerError("Respuesta inválida del servidor");
+          setServerError("Invalid server response");
         }
       } catch (err: any) {
         if (axios.isAxiosError(err)) {
-          setServerError(
-            err.response?.data?.message || "Error al iniciar sesión"
-          );
+          setServerError(err.response?.data?.message || "Login error");
         } else {
-          setServerError("Error inesperado al iniciar sesión");
+          setServerError("Unexpected login error");
         }
       } finally {
         setSubmitting(false);
@@ -75,7 +72,7 @@ const Login = () => {
   return (
     <PublicRoute>
       <div className="relative min-h-screen overflow-hidden bg-black">
-        {/* Imagen de fondo */}
+        {/* Background image */}
         <img
           src="/assets/backgrounds/nocthalis-login-bg-8.png"
           alt="Nocthalis"
@@ -83,7 +80,7 @@ const Login = () => {
           style={{ objectPosition: "left 32% top 18%" }}
         />
 
-        {/* Overlay sutil gris-azulado */}
+        {/* Subtle bluish overlay */}
         <div
           className="pointer-events-none absolute inset-0"
           style={{
@@ -93,19 +90,19 @@ const Login = () => {
           }}
         />
 
-        {/* Contenido */}
+        {/* Content */}
         <div className="relative z-10 flex min-h-screen items-center justify-center md:justify-end px-4 md:pr-[8vw]">
-          {/* Panel más pequeño y neutro */}
+          {/* Compact panel */}
           <div
             className="w-full max-w-xs text-white rounded-xl p-5 border backdrop-blur-md 
                           shadow-[0_12px_40px_rgba(0,0,0,0.55)]
                           bg-[#11131a]/90 border-white/10"
           >
             <h2 className="text-xl font-semibold text-center mb-1 tracking-wide text-gray-100">
-              Iniciar sesión
+              Sign in
             </h2>
             <p className="text-center text-xs text-gray-400 mb-4">
-              Bienvenido a <span className="text-gray-200">Nocthalis</span>
+              Welcome to <span className="text-gray-200">Nocthalis</span>
             </p>
 
             <Formik
@@ -135,7 +132,7 @@ const Login = () => {
                       autoComplete="email"
                       className="w-full bg-[#0d0f16]/80 border border-gray-600/40 rounded px-3 py-1.5 text-sm text-white placeholder-gray-400
                                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                      placeholder="tu@email.com"
+                      placeholder="you@email.com"
                     />
                     <ErrorMessage
                       name="email"
@@ -149,7 +146,7 @@ const Login = () => {
                       htmlFor="password"
                       className="block text-xs mb-1 text-gray-300"
                     >
-                      Contraseña
+                      Password
                     </label>
                     <div className="relative">
                       <Field
@@ -161,14 +158,12 @@ const Login = () => {
                                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                         placeholder="••••••••"
                       />
-                      {/* Ojo sobrio */}
+                      {/* Eye toggle */}
                       <button
                         type="button"
                         onClick={() => setShowPassword((v) => !v)}
                         aria-label={
-                          showPassword
-                            ? "Ocultar contraseña"
-                            : "Mostrar contraseña"
+                          showPassword ? "Hide password" : "Show password"
                         }
                         className="absolute inset-y-0 right-2 flex items-center px-1 text-gray-400 hover:text-gray-200"
                         tabIndex={-1}
@@ -223,17 +218,17 @@ const Login = () => {
                                 text-white text-sm font-medium
                                 ${isSubmitting ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
-                    {isSubmitting ? "Ingresando..." : "Ingresar"}
+                    {isSubmitting ? "Signing in..." : "Sign in"}
                   </button>
 
                   <div className="pt-2 border-t border-gray-600/30">
                     <p className="text-xs mt-2 text-center text-gray-400">
-                      ¿No tienes cuenta?{" "}
+                      Don’t have an account?{" "}
                       <Link
                         to="/select-class"
                         className="text-blue-400 hover:underline hover:text-blue-300"
                       >
-                        Regístrate aquí
+                        Register here
                       </Link>
                     </p>
                   </div>
