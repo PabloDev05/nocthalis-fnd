@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { useAuth } from "../../../context/AuthContext";
 
-/* Helpers JWT -> email por si querés prefill automático */
+/* JWT helper → prefill email from token if available */
 function b64urlDecode(input: string): string {
   let str = input.replace(/-/g, "+").replace(/_/g, "/");
   const pad = str.length % 4;
@@ -27,8 +27,8 @@ const MAX_LEN = 600;
 
 type Props = {
   defaultEmail?: string | null;
-  defaultUsername?: string | null;
-  /** compat antiguo */
+  defaultUsername?: string | null; // kept for compatibility if you re-add username later
+  /** legacy alias */
   defaultName?: string | null;
 };
 
@@ -45,18 +45,17 @@ export default function FeedbackForm({
 
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState(emailPrefill);
-  const [username, setUsername] = useState(usernamePrefill);
+  // username kept in state for future optional field (not rendered in this compact version)
+  const [username] = useState(usernamePrefill);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [ok, setOk] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [showUser, setShowUser] = useState(false);
 
   useEffect(() => {
     setEmail(emailPrefill);
-    setUsername(usernamePrefill);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emailPrefill, usernamePrefill]);
+  }, [emailPrefill]);
 
   const left = useMemo(() => Math.max(0, MAX_LEN - message.length), [message]);
 
@@ -64,16 +63,16 @@ export default function FeedbackForm({
     e.preventDefault();
     setErr(null);
     if (!email || !EMAIL_RX.test(email))
-      return setErr("Ingresá un email válido.");
-    if (!message.trim()) return setErr("Escribí tu comentario.");
+      return setErr("Please enter a valid email.");
+    if (!message.trim()) return setErr("Please write a brief description.");
 
     try {
       setSending(true);
       await axios.post(
-        "/feedback/feed-submit",
+        "/api/feedback",
         {
           email: email.trim().toLowerCase(),
-          username: username.trim() || undefined,
+          username: username.trim?.() || undefined,
           message: message.trim().slice(0, MAX_LEN),
         },
         {
@@ -85,28 +84,27 @@ export default function FeedbackForm({
       );
       setOk(true);
       setMessage("");
-      // Mostrar OK ~1.6s con animación y luego colapsar
+      // Show success ~1.6s with animation and then collapse the panel
       setTimeout(() => {
         setOk(false);
         setOpen(false);
       }, 1600);
-    } catch (e: any) {
-      setErr("No se pudo enviar. Probá de nuevo.");
+    } catch {
+      setErr("Could not send feedback. Please try again.");
     } finally {
       setSending(false);
     }
   }
 
-  /* Colores: usa tu paleta (accent/border/panel), no naranja */
+  // Colors: use your palette (accent/border/panel)
   const accent = "var(--accent,#7c87ff)";
 
   return (
     <div
       className={`rounded-xl border bg-[var(--panel-2)] shadow-lg relative overflow-hidden
-                  ${open ? "border-[var(--border)]" : "border-[var(--border)]"}
-                  transition-colors`}
+                  border-[var(--border)] transition-colors`}
     >
-      {/* Header compacto */}
+      {/* Compact header */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -118,7 +116,7 @@ export default function FeedbackForm({
       >
         <div className="flex items-center gap-2">
           <span className="relative">
-            <MessageSquare className={`w-4 h-4`} style={{ color: accent }} />
+            <MessageSquare className="w-4 h-4" style={{ color: accent }} />
             {!open && (
               <span
                 className="absolute inset-0 rounded-full blur-[6px] opacity-30 animate-pulse"
@@ -130,7 +128,10 @@ export default function FeedbackForm({
             )}
           </span>
           <div>
-            <div className="font-semibold text-[12px]">Dejá tu feedback</div>
+            <div className="font-semibold text-[12px]">Leave your feedback</div>
+            <div className="text-[11px] text-[var(--muted,#a0a6b1)]">
+              Click to open
+            </div>
           </div>
         </div>
         <ChevronDown
@@ -139,7 +140,7 @@ export default function FeedbackForm({
         />
       </button>
 
-      {/* línea sweep en color accent cuando está abierto o al enviar OK */}
+      {/* accent sweep line when open or after OK */}
       <AnimatePresence initial={false}>
         {(open || ok) && (
           <motion.div
@@ -156,7 +157,7 @@ export default function FeedbackForm({
         )}
       </AnimatePresence>
 
-      {/* Panel colapsable */}
+      {/* Collapsible panel */}
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
@@ -178,7 +179,7 @@ export default function FeedbackForm({
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="tucorreo@ejemplo.com"
+                    placeholder="your@email.com"
                     className="w-full rounded-lg bg-[var(--panel-3,#0f1320)] border
                                px-2.5 py-1.5 text-[12px] outline-none
                                border-[var(--border)] focus:border-[var(--accent,#7c87ff)]
@@ -186,17 +187,17 @@ export default function FeedbackForm({
                   />
                 </div>
 
-                {/* Mensaje */}
+                {/* Message */}
                 <div className="space-y-0.5">
                   <label className="text-[11px] text-[var(--muted,#a0a6b1)]">
-                    Descripción
+                    Description
                   </label>
                   <textarea
                     value={message}
                     onChange={(e) =>
                       setMessage(e.target.value.slice(0, MAX_LEN))
                     }
-                    placeholder="¿Qué mejorar o qué falló?"
+                    placeholder="What should we improve, or what went wrong?"
                     rows={3}
                     className="w-full rounded-lg bg-[var(--panel-3,#0f1320)] border
                                px-2.5 py-1.5 text-[12px] outline-none resize-y min-h-[84px]
@@ -204,8 +205,8 @@ export default function FeedbackForm({
                                transition-colors"
                   />
                   <div className="flex items-center justify-between text-[10px] text-[var(--muted,#a0a6b1)]">
-                    <span>Límite: {MAX_LEN}</span>
-                    <span>{left} restantes</span>
+                    <span>Limit: {MAX_LEN}</span>
+                    <span>{left} left</span>
                   </div>
                 </div>
 
@@ -238,21 +239,19 @@ export default function FeedbackForm({
                       }}
                       className="relative overflow-hidden text-[11px] text-emerald-300 bg-emerald-300/10 border border-emerald-300/30 rounded-md px-2 py-1.5"
                     >
-                      {/* burst radial con el color accent para integrar estética */}
+                      {/* subtle burst using accent color */}
                       <span
                         className="pointer-events-none absolute -inset-1 opacity-40 blur-2xl"
                         style={{
                           background: `radial-gradient(600px 120px at 10% 50%, ${accent}, transparent)`,
                         }}
                       />
-                      <span className="relative">
-                        ¡Gracias! Feedback enviado.
-                      </span>
+                      <span className="relative">Thanks! Feedback sent.</span>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                {/* Botón */}
+                {/* Submit button */}
                 <div className="flex justify-end">
                   <motion.button
                     type="submit"
@@ -264,7 +263,7 @@ export default function FeedbackForm({
                                disabled:opacity-60 transition-all"
                   >
                     <Send className="w-3.5 h-3.5" />
-                    {sending ? "Enviando…" : "Enviar"}
+                    {sending ? "Sending…" : "Send"}
                   </motion.button>
                 </div>
               </form>

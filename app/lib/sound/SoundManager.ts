@@ -1,7 +1,7 @@
 import { Howl, Howler } from "howler";
 
 /** Incluí los UI sfx para que puedas llamarlos sin error. */
-export type SfxKind = "hit" | "miss" | "block" | "crit" | "dot" | "ultimate" | "passive" | "status" | "uiClick" | "uiStart" | "uiReward"; // 👈 NUEVO: fanfarria de recompensas
+export type SfxKind = "hit" | "miss" | "block" | "crit" | "dot" | "ultimate" | "passive" | "status" | "uiClick" | "uiStart" | "uiReward" | "ui_selected"; // 👈 NUEVO: fanfarria de recompensas
 
 export type SfxConfig = Partial<Record<SfxKind, string | string[]>>;
 
@@ -154,6 +154,7 @@ export const soundManager = new SoundManager({
   //   uiClick: "/assets/sfx/ui_click.mp3",
 
   // 👇 UI
+  ui_selected: "/assets/sfx/ui_selected.mp3",
   uiStart: "/assets/sfx/ui_start_fight.mp3",
   uiReward: "/assets/sfx/ui_reward.mp3", // 👈 NUEVO: fanfarria de recompensas
 });
