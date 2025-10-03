@@ -7,6 +7,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import PublicRoute from "./PublicRoute";
 import { Eye, EyeOff } from "lucide-react";
+import { soundManager } from "../lib/sound/SoundManager";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:3030/api";
@@ -58,6 +59,13 @@ const Register = () => {
     if (!selectedClassId) navigate("/select-class");
   }, [selectedClassId, navigate]);
 
+  // Preload del sfx que vas a usar en el botón
+  useEffect(() => {
+    try {
+      soundManager.preload(["ui_selected"]);
+    } catch {}
+  }, []);
+
   const validationSchema = Yup.object({
     username: Yup.string().required("El nombre de usuario es obligatorio"),
     email: Yup.string()
@@ -100,11 +108,10 @@ const Register = () => {
         characterClass: selectedClassId,
       });
 
-      // ✅ ahora validamos por token (userId ya no viene en la raíz)
       if (res.data?.token) {
         login(
           res.data.token,
-          values.email, // guardamos email en el AuthContext
+          values.email,
           true,
           res.data.characterClassName ?? selectedClassName ?? null,
           res.data.characterClassId ?? res.data.characterClass ?? null
@@ -118,7 +125,8 @@ const Register = () => {
         localStorage.removeItem("selectedClassJSON");
 
         setSuccess(res.data.message || "Usuario registrado correctamente");
-        navigate("/game"); // navegación directa
+
+        navigate("/game");
       } else {
         setServerError("Respuesta inválida del servidor");
       }
@@ -251,6 +259,13 @@ const Register = () => {
                       !selectedClassId ||
                       !isValidObjectId(selectedClassId)
                     }
+                    // ⭐ Sonido solo al click (ya no hay uiReward en éxito)
+                    onClick={() => {
+                      try {
+                        soundManager.unlock();
+                        soundManager.play("ui_selected", { volume: 0.9 });
+                      } catch {}
+                    }}
                     className={`w-full py-2 rounded bg-[#2f1e4d] hover:bg-[#40235f] transition duration-300 shadow-md text-white ${
                       isSubmitting ? "opacity-50 cursor-not-allowed" : ""
                     }`}

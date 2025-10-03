@@ -7,12 +7,41 @@ export const PVP_STAMINA_COST = Number(import.meta.env.VITE_PVP_STAMINA_COST ?? 
 
 export type ActorRole = "attacker" | "defender";
 
-/** ← añadimos "status_applied" */
+/** Añadimos "status_applied" (y mantenemos los existentes del runner). */
 export type TimelineEvent = "hit" | "crit" | "block" | "miss" | "passive_proc" | "ultimate_cast" | "dot_tick" | "status_applied";
 
-/** añadimos type?: string y statusApplied? para compat */
+/** Breakdown rico para daños/mitigaciones (block/DR/elemento/crit, etc.). */
+export type DamageBreakdown = {
+  // Bloqueo
+  blockedAmount?: number;
+  preBlock?: number;
+  blockReducedPercent?: number;
+  finalAfterBlock?: number;
+
+  // Damage Reduction plana
+  drReducedPercent?: number;
+  finalAfterDR?: number;
+
+  // Otros factores posibles del runner/mitigación
+  defenseFactor?: number;
+  elementFactor?: number;
+  critBonusPercent?: number;
+
+  // Permite campos adicionales sin romper tipos
+  [k: string]: any;
+};
+
+export type DamageObj = {
+  final?: number; // daño final aplicado
+  raw?: number; // opcional (si el runner lo envía)
+  breakdown?: DamageBreakdown;
+};
+
+/** Evento tal como viene del backend (ahora con campos de overkill y block). */
 export type TimelineBE = {
   turn: number;
+
+  /** BE puede enviar source/actor (ambos equivalentes); opcionalmente "player/enemy". */
   source?: ActorRole | "player" | "enemy";
   actor?: ActorRole | "player" | "enemy";
 
@@ -21,9 +50,28 @@ export type TimelineBE = {
   event: string | TimelineEvent;
   outcome?: string;
 
+  // Daño (formas tolerantes)
   damage?: number;
+  damageNumber?: number;
+  damageObj?: DamageObj;
+
+  // Mitigación y números de bloqueo (compat con runner)
+  blockedAmount?: number;
+  preBlock?: number;
+  blockReducedPercent?: number;
+  finalAfterBlock?: number;
+  drReducedPercent?: number;
+  finalAfterDR?: number;
+
+  // Crudos / auxiliares
+  rawDamage?: number;
+
+  // HP “post evento” (compat)
   attackerHP?: number;
   defenderHP?: number;
+
+  // ¡Nuevo! Overkill si el golpe mata y sobra daño
+  overkill?: number;
 
   ability?: {
     kind: "passive" | "ultimate";
@@ -65,6 +113,9 @@ export type TimelineBE = {
   bleed?: boolean;
   poison?: boolean;
   burn?: boolean;
+
+  // Por si el BE envía breakdown suelto al nivel del evento
+  breakdown?: DamageBreakdown;
 };
 
 /** igual que antes */
@@ -131,16 +182,21 @@ export type Reward = {
   honor?: number;
 } | null;
 
-/** 👇 añadimos "status" a LogKind */
+/** 👇 añadimos "status" a LogKind (queda igual que tu UI) */
 export type LogKind = "hit" | "crit" | "block" | "miss" | "passive" | "ultimate" | "dot" | "status";
 
+/**
+ * LogEntry que usa la UI:
+ *  - Mantiene los campos mínimos (turn/kind/actor/text)
+ *  - PERO además hereda opcionalmente todo lo que venga en TimelineBE,
+ *    para no perder overkill/breakdown/etc.
+ */
 export type LogEntry = {
   turn: number;
   kind: LogKind;
-  text: string;
   actor: "me" | "opp";
-  value?: number;
-};
+  text?: string;
+} & Partial<TimelineBE>;
 
 export type StaminaSnap = { current: number; max: number };
 

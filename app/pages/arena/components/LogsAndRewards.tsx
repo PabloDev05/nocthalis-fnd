@@ -1,4 +1,6 @@
-// app/pages/arena/components/LogsAndRewards.tsx
+// src/components/LogsAndRewards.tsx
+// NOTA: Pasá siempre entries = response.timeline (no log/snapshots) para ver overkill y breakdowns.
+
 import {
   Coins,
   Crown,
@@ -27,7 +29,7 @@ export function EmphasizeNumbers({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         /^\d+$/.test(p) ? (
-          <b key={i} className="text-white font-extrabold">
+          <b key={i} className="text-white font-extrabold tabular-nums">
             {p}
           </b>
         ) : (
@@ -38,13 +40,102 @@ export function EmphasizeNumbers({ text }: { text: string }) {
   );
 }
 
-/** Número bloqueado desde el texto o campo bloqueado (si existiera). */
+/** Obtiene el “kind” de forma tolerante (acepta event/kind) y normaliza procs. */
+function getKind(e: LogEntry): LogKind {
+  const raw = String((e as any)?.kind ?? (e as any)?.event ?? "hit");
+  if (raw === "ultimate_cast") return "ultimate";
+  if (raw === "passive_proc") return "passive";
+  if (raw === "dot_tick") return "dot";
+  const k = raw as LogKind;
+  return (
+    [
+      "hit",
+      "crit",
+      "block",
+      "miss",
+      "passive",
+      "ultimate",
+      "dot",
+      "status",
+    ] as LogKind[]
+  ).includes(k)
+    ? k
+    : "hit";
+}
+
+/** Normaliza el actor para textos (“me/opp” o “attacker/defender”). */
+function getActorSide(e: LogEntry): "me" | "opp" {
+  const a: any = (e as any)?.actor ?? (e as any)?.source;
+  if (a === "me" || a === "attacker" || a === "player") return "me";
+  if (a === "opp" || a === "defender" || a === "enemy") return "opp";
+  return "me";
+}
+
+/** ¿El actor del evento es el atacante mecánico? (para fallback de overkill) */
+function isAttackerEvent(e: LogEntry): boolean {
+  const s = String((e as any)?.source ?? (e as any)?.actor ?? "attacker");
+  return s === "attacker" || s === "player" || s === "me";
+}
+
+/** Daño final (acepta damageObj.final / damageNumber / damage). */
+function getFinalDamage(e: LogEntry): number {
+  const d1 = (e as any)?.damage?.final;
+  if (Number.isFinite(d1)) return Math.round(d1 as number);
+  const d2 = (e as any)?.damageObj?.final;
+  if (Number.isFinite(d2)) return Math.round(d2 as number);
+  const d3 = (e as any)?.damageNumber;
+  if (Number.isFinite(d3)) return Math.round(d3 as number);
+  const d4 = (e as any)?.damage;
+  if (Number.isFinite(d4)) return Math.round(d4 as number);
+  return 0;
+}
+
+/** Número bloqueado desde meta/breakdown o desde el texto como fallback. */
 function extractBlockedAmount(e: LogEntry): number {
-  // @ts-ignore: futuro campo opcional
-  if (typeof (e as any)?.blocked === "number")
-    return Math.max(0, Math.round((e as any).blocked));
-  const m = String(e?.text ?? "").match(/\d+/);
+  if (typeof (e as any)?.blockedAmount === "number")
+    return Math.max(0, Math.round((e as any).blockedAmount));
+  if (typeof (e as any)?.breakdown?.blockedAmount === "number")
+    return Math.max(0, Math.round((e as any).breakdown.blockedAmount));
+  const m = String((e as any)?.text ?? "").match(/\d+/);
   return m ? Math.max(0, Math.round(Number(m[0]))) : 0;
+}
+
+/** Overkill directo si viene del backend. */
+function extractOverkillField(e: LogEntry): number {
+  const ok1 = (e as any)?.overkill;
+  const ok2 = (e as any)?.breakdown?.overkill;
+  const val = Number.isFinite(Number(ok1))
+    ? Number(ok1)
+    : Number.isFinite(Number(ok2))
+      ? Number(ok2)
+      : 0;
+  return Math.max(0, Math.round(val || 0));
+}
+
+/** Fallback de overkill usando HP del evento anterior (post-evento previo = pre-evento actual). */
+function computeOverkillFromHP(
+  e: LogEntry,
+  index: number,
+  entries: LogEntry[]
+): number {
+  const kind = getKind(e);
+  if (kind === "miss") return 0;
+
+  const dmg = getFinalDamage(e);
+  if (!Number.isFinite(dmg) || dmg <= 0) return 0;
+
+  // necesitamos el HP del objetivo ANTES del evento actual
+  const prev = index > 0 ? (entries[index - 1] as any) : undefined;
+  if (!prev) return 0;
+
+  const targetPrevHP = isAttackerEvent(e)
+    ? (prev as any)?.defenderHP
+    : (prev as any)?.attackerHP;
+
+  if (!Number.isFinite(targetPrevHP)) return 0;
+
+  const ok = Math.max(0, Math.round(dmg - Math.max(0, Number(targetPrevHP))));
+  return ok;
 }
 
 /** Heurística simple para inferir nombres si no vienen por props */
@@ -57,18 +148,18 @@ function guessNames(entries: LogEntry[]) {
   let opp: string | undefined;
 
   for (const e of entries) {
-    const t = String(e.text || "");
+    const t = String((e as any).text || "");
     const m1 = t.match(whoVerb);
     if (m1) {
       const name = m1[1].trim();
-      if (e.actor === "me" && !me) me = name;
-      if (e.actor === "opp" && !opp) opp = name;
+      if (getActorSide(e) === "me" && !me) me = name;
+      if (getActorSide(e) === "opp" && !opp) opp = name;
     }
     const m2 = t.match(onTarget);
     if (m2) {
       const name = m2[1].trim();
-      if (e.actor === "me" && !opp) opp = name;
-      if (e.actor === "opp" && !me) me = name;
+      if (getActorSide(e) === "me" && !opp) opp = name;
+      if (getActorSide(e) === "opp" && !me) me = name;
     }
     if (me && opp) break;
   }
@@ -83,12 +174,6 @@ function localizeNames(raw: string, myName: string, oppName: string): string {
     .replace(/\bEnemy\b/gi, oppName)
     .replace(/\bOpponent\b/gi, oppName)
     .trim();
-}
-
-/** opcional: impact kinds */
-type ImpactKind = "hit" | "crit" | "block" | "miss" | "dot";
-function isImpact(e: LogEntry): e is LogEntry & { kind: ImpactKind } {
-  return e.kind !== "status" && e.kind !== "passive" && e.kind !== "ultimate";
 }
 
 /** Resalta el nombre de la habilidad si el texto viene como “triggers X” o “unleashes X” */
@@ -108,6 +193,80 @@ function renderAbilityText(s: string) {
   );
 }
 
+/** Línea compacta de bloqueo con datos: "X bloquea N — pre → post → DR p% → final". */
+function buildBlockLine(
+  e: LogEntry,
+  names: { myName: string; oppName: string },
+  entries: LogEntry[]
+) {
+  const blocked = extractBlockedAmount(e);
+  const actor = getActorSide(e);
+
+  // el que bloquea es el ACTOR del evento 'block'
+  const blocker =
+    actor === "me" ? names.myName || "tú" : names.oppName || "oponente";
+
+  // campos del evento/breakdown
+  const b: any = (e as any)?.breakdown || {};
+  const preBlock =
+    (e as any)?.preBlock ??
+    b.preBlock ??
+    (e as any)?.rawDamage ??
+    (e as any)?.damage?.raw;
+  const blockPct = (e as any)?.blockReducedPercent ?? b.blockReducedPercent;
+  const afterBlock =
+    (e as any)?.finalAfterBlock ??
+    (typeof preBlock === "number" && typeof blocked === "number"
+      ? Math.max(0, preBlock - blocked)
+      : undefined);
+  const drPct = (e as any)?.drReducedPercent ?? b.drReducedPercent;
+
+  let finalAfterDR: number | undefined =
+    (e as any)?.finalAfterDR ?? b.finalAfterDR;
+
+  // fallback: buscar el HIT del mismo turno si no vino finalAfterDR
+  if (finalAfterDR == null) {
+    const siblingHit = entries.find(
+      (x) => (x as any).turn === (e as any).turn && getKind(x) === "hit"
+    );
+    const sFinal =
+      (siblingHit as any)?.damage?.final ??
+      (siblingHit as any)?.damageObj?.final ??
+      (siblingHit as any)?.damageNumber ??
+      (siblingHit as any)?.damage;
+    if (Number.isFinite(sFinal)) finalAfterDR = Math.round(Number(sFinal));
+  }
+
+  const arrows: string[] = [];
+  if (Number.isFinite(preBlock))
+    arrows.push(String(Math.round(Number(preBlock))));
+  if (Number.isFinite(afterBlock))
+    arrows.push(String(Math.round(Number(afterBlock))));
+  if (Number.isFinite(drPct)) arrows.push(`DR ${Math.round(Number(drPct))}%`);
+  if (Number.isFinite(finalAfterDR))
+    arrows.push(String(Math.round(Number(finalAfterDR))));
+
+  const right = arrows.length ? ` — ${arrows.join(" → ")}` : "";
+  return `${blocker} bloquea ${blocked}${right}`;
+}
+
+/** Texto por defecto, amigable, para cuando no viene e.text. */
+function defaultFriendlyLine(
+  e: LogEntry,
+  names: { myName: string; oppName: string }
+) {
+  const kind = getKind(e);
+  const who = getActorSide(e) === "me" ? names.myName : names.oppName;
+  const dmg = getFinalDamage(e);
+
+  if (kind === "miss") return `${who} falla el golpe.`;
+  if (kind === "crit") return `${who} asesta un crítico por ${dmg}.`;
+  if (kind === "dot") return `${who} sufre daño periódico de ${dmg}.`;
+  if (kind === "hit") return `${who} golpea por ${dmg}.`;
+  if (kind === "block") return buildBlockLine(e, names, []); // no debería llegar aquí
+  return `${who} actúa.`;
+}
+
 export function CombatLog({
   entries,
   myName: myNameProp,
@@ -119,17 +278,16 @@ export function CombatLog({
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
 
-  // 🔊 Preload (una sola vez); podés quitarlo si precargás en otro lado.
+  // 🔊 Preload
   useEffect(() => {
     soundManager.preload();
   }, []);
 
-  // 🔊 Reproducir SFX al agregarse una nueva entrada al log
+  // 🔊 SFX última entrada
   useEffect(() => {
     if (!entries?.length) return;
     const last = entries[entries.length - 1];
-
-    const k = last.kind;
+    const k = getKind(last);
     if (
       k === "hit" ||
       k === "crit" ||
@@ -149,16 +307,14 @@ export function CombatLog({
               : k === "ultimate"
                 ? { volume: 1.0 }
                 : undefined;
-
       soundManager.play(k as any, opts);
     }
   }, [entries.length]);
 
-  // autoscroll (suave)
+  // autoscroll
   useEffect(() => {
     if (!ref.current) return;
-    const el = ref.current;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    ref.current.scrollTo({ top: ref.current.scrollHeight, behavior: "smooth" });
   }, [entries.length]);
 
   const { myName, oppName } = useMemo(() => {
@@ -245,44 +401,50 @@ export function CombatLog({
       <div ref={ref} className="max-h-56 overflow-y-auto">
         <ul className="divide-y divide-[var(--border)]">
           {entries.map((e, i) => {
-            const c = chip(e.kind);
+            const k = getKind(e);
+            const c = chip(k);
 
             const rowCls =
-              e.kind === "crit"
-                ? "row-crit"
-                : e.kind === "block"
-                  ? "row-block"
-                  : "";
+              k === "crit" ? "row-crit" : k === "block" ? "row-block" : "";
             const txtCls =
-              e.kind === "crit"
+              k === "crit"
                 ? "text-red-200"
-                : e.kind === "miss"
+                : k === "miss"
                   ? "text-zinc-300"
-                  : e.kind === "block"
+                  : k === "block"
                     ? "text-sky-200"
-                    : e.kind === "ultimate"
+                    : k === "ultimate"
                       ? "text-amber-200"
-                      : e.kind === "passive"
+                      : k === "passive"
                         ? "text-indigo-200"
-                        : e.kind === "status"
+                        : k === "status"
                           ? "text-violet-200"
-                          : e.kind === "dot"
+                          : k === "dot"
                             ? "text-orange-200"
                             : "text-zinc-200";
 
-            // Texto base con nombres localizados
-            let displayText = localizeNames(e.text, myName, oppName);
+            // Texto base con nombres localizados o amigable
+            let displayText = "";
+            const rawText = String((e as any)?.text || "");
+            if (rawText) {
+              displayText = localizeNames(rawText, "You", "Opponent");
+            } else if (k === "block") {
+              displayText = buildBlockLine(e, { myName, oppName }, entries);
+            } else {
+              displayText = defaultFriendlyLine(e, { myName, oppName });
+            }
 
-            // 🔁 BLOCK FIX: el actor es el ATACANTE; el que BLOQUEA es el OPUESTO.
-            if (e.kind === "block") {
-              const n = extractBlockedAmount(e);
-              const blocker = e.actor === "me" ? oppName : myName;
-              displayText = `${blocker} blocks ${n}!`;
+            // Overkill (si lo trae el backend) + fallback por HP prev.
+            let ok = extractOverkillField(e);
+            if (ok <= 0) {
+              ok = computeOverkillFromHP(e, i, entries);
+            }
+            if (ok > 0) {
+              displayText = `${displayText} (overkill +${ok})`;
             }
 
             const content =
-              e.kind === "ultimate" || e.kind === "passive" ? (
-                // resalto nombre de habilidad si hay patrón
+              k === "ultimate" || k === "passive" ? (
                 renderAbilityText(displayText)
               ) : (
                 <EmphasizeNumbers text={displayText} />
@@ -290,20 +452,40 @@ export function CombatLog({
 
             return (
               <li
-                key={`${e.turn}-${i}`}
-                className={`px-3 py-2 flex items-center gap-2 text-[12px] ${rowCls}`}
+                key={`${(e as any).turn ?? i}-${i}`}
+                className={`px-3 py-2 ${rowCls}`}
               >
-                <span
-                  className={`inline-flex items-center gap-1 px-2 h-5 rounded border ${c.cls}`}
-                  title={e.kind}
-                >
-                  {c.icon}
-                  <strong className="tracking-wide">{c.label}</strong>
-                </span>
-                <span className="text-zinc-500 tabular-nums">T{e.turn}</span>
-                <span className={txtCls} title={e.text}>
-                  {content}
-                </span>
+                <div className="flex items-center gap-2 text-[12px]">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 h-5 rounded border ${c.cls}`}
+                    title={k}
+                  >
+                    {c.icon}
+                    <strong className="tracking-wide">{c.label}</strong>
+                  </span>
+
+                  <span className="text-zinc-500 tabular-nums">
+                    T{(e as any).turn ?? i + 1}
+                  </span>
+
+                  {/* Badge de OVERKILL: visible aunque el texto tenga elipsis */}
+                  {ok > 0 && (
+                    <span
+                      className="ml-1 inline-flex items-center px-1.5 h-5 rounded border bg-red-900/40 text-red-200 border-red-700/60 text-[10px] font-semibold"
+                      title={`Overkill +${ok}`}
+                    >
+                      OVERKILL +{ok}
+                    </span>
+                  )}
+
+                  {/* una sola línea, con elipsis si no entra */}
+                  <span
+                    className={`${txtCls} flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis`}
+                    title={displayText}
+                  >
+                    {content}
+                  </span>
+                </div>
               </li>
             );
           })}
@@ -321,7 +503,6 @@ export function CombatLog({
 
 /* ===== Rewards panel (con SFX exclusivo al aparecer) ===== */
 export function RewardsPanel({ rewards }: { rewards: Reward }) {
-  // 🔊 SFX al mostrar el panel de recompensas — totalmente separado del start fight
   useEffect(() => {
     if (!rewards) return;
     soundManager.play("uiReward", { volume: 1 });
@@ -329,9 +510,11 @@ export function RewardsPanel({ rewards }: { rewards: Reward }) {
 
   if (!rewards) return null;
 
-  const gold = asInt(rewards.gold ?? 0);
-  const xp = asInt(rewards.xp ?? 0);
-  const items = Array.isArray(rewards.items) ? rewards.items : [];
+  const gold = asInt((rewards as any).gold ?? (rewards as any).goldGained ?? 0);
+  const xp = asInt((rewards as any).xp ?? (rewards as any).xpGained ?? 0);
+  const items = Array.isArray((rewards as any).items)
+    ? (rewards as any).items
+    : [];
 
   return (
     <div className="relative w-[min(82vw,300px)] max-w-[280px] mx-auto">
@@ -369,9 +552,12 @@ export function RewardsPanel({ rewards }: { rewards: Reward }) {
 
             {items.length ? (
               <ul className="text-[12px] text-zinc-200 space-y-1">
-                {items.map((it, i) => (
-                  <li key={`${it.name}-${i}`} className="flex justify-between">
-                    <span className="break-words">{it.name}</span>
+                {items.map((it: any, i: number) => (
+                  <li
+                    key={`${it.name ?? "item"}-${i}`}
+                    className="flex justify-between"
+                  >
+                    <span className="break-words">{it.name ?? "Item"}</span>
                     <span className="text-zinc-400">x{asInt(it.qty ?? 1)}</span>
                   </li>
                 ))}

@@ -2,7 +2,7 @@ import { ActorRole, ScheduleOptions, ScheduledEvent, ScheduledEventType, Timelin
 import { normalizeEvent, enrichTimelinePayload, asInt } from "./helpers";
 
 const DEFAULTS: ScheduleOptions = {
-  minTurnMs: 1150, // un poquito más largo para que el rival “se vea”
+  minTurnMs: 1150,
   gapSmallMs: 120,
   passiveProcMs: 520,
   ultimateCastMs: 920,
@@ -13,26 +13,22 @@ const DEFAULTS: ScheduleOptions = {
   extraMissMs: 150,
 };
 
-// Delay de arranque antes del primer ataque (para audio/FX de inicio)
+// Padding inicial para que se vea el “VS” y FX de arranque
 const DEFAULT_INTRO_DELAY_MS = 2000;
 
 export function buildAnimationSchedule(timeline: TimelineBE[], opts?: Partial<ScheduleOptions>): { totalMs: number; events: ScheduledEvent[] } {
   const cfg = { ...DEFAULTS, ...(opts || {}) };
-
-  // ⬇️ soporte optativo (sin tocar los tipos):
   const introDelayMs = typeof (opts as any)?.introDelayMs === "number" && (opts as any).introDelayMs >= 0 ? (opts as any).introDelayMs : DEFAULT_INTRO_DELAY_MS;
 
   const out: ScheduledEvent[] = [];
   if (!Array.isArray(timeline) || timeline.length === 0) return { totalMs: 0, events: out };
 
-  // Cursor temporal arranca con un padding inicial
+  // Cursor temporal arranca con padding inicial
   let tCursor = introDelayMs;
   let perTurnIndex = 0;
 
-  // Primer turno seguro en entero
   const firstTurn = asInt(timeline[0]?.turn ?? 1);
   let lastTurn = firstTurn;
-  // El inicio del turno considera el padding inicial (importante para minTurnMs)
   let turnStart = tCursor;
 
   const schedule = (type: ScheduledEventType, role: ActorRole, dur: number, payload: TimelineBE) => {
@@ -57,10 +53,10 @@ export function buildAnimationSchedule(timeline: TimelineBE[], opts?: Partial<Sc
     const raw = enrichTimelinePayload(raw0);
     const next = timeline[i + 1];
 
-    // Asegurar turn como entero simple
+    // Asegurar turn entero
     raw.turn = asInt(raw.turn ?? i + 1);
 
-    // Cambio de turno → respetar duración mínima del turno anterior
+    // Cambio de turno → garantizar duración mínima del turno anterior
     if (raw.turn !== lastTurn) {
       const minEnd = turnStart + cfg.minTurnMs;
       if (tCursor < minEnd) tCursor = minEnd;
@@ -92,11 +88,11 @@ export function buildAnimationSchedule(timeline: TimelineBE[], opts?: Partial<Sc
       continue;
     }
 
-    // Golpe básico (windup + impacto derivado)
+    // Golpe básico (windup + impacto)
     schedule("attack_windup", role, cfg.attackWindupMs, raw);
     schedule(deriveImpact(raw), role, cfg.impactMs, raw);
 
-    // Cierre de turno si es el último evento del turno
+    // Cierre del turno si es el último evento del turno
     if (!next || asInt(next.turn ?? i + 2) !== raw.turn) {
       const minEnd = turnStart + cfg.minTurnMs;
       if (tCursor < minEnd) tCursor = minEnd;

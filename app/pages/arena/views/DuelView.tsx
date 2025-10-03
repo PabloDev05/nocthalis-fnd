@@ -120,6 +120,17 @@ export function DuelView(props: Props) {
     selectedOpp?.className ?? ""
   );
 
+  useEffect(() => {
+    if (!combatLog?.length) return;
+    const last = combatLog[combatLog.length - 1] as any;
+    console.debug(
+      "DuelView last timeline entry:",
+      last,
+      "overkill=",
+      last?.overkill
+    );
+  }, [combatLog]);
+
   // ─── VS: animar SOLO al entrar a "VS" ───────────────────────
   const [duelStartKey, setDuelStartKey] = useState(0);
   const [showSplit, setShowSplit] = useState(false);
